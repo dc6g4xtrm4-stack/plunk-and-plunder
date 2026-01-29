@@ -33,6 +33,7 @@ namespace PlunkAndPlunder.Core
         private AIController aiController;
         private NetworkManager networkManager;
         private ConflictResolutionUI conflictResolutionUI;
+        private CombatResultsUI combatResultsUI;
 
         // Events
         public event Action<GamePhase> OnPhaseChanged;
@@ -104,8 +105,9 @@ namespace PlunkAndPlunder.Core
             turnAnimator.OnAnimationStep += HandleAnimationStep;
             turnAnimator.OnAnimationComplete += HandleAnimationComplete;
             turnAnimator.OnConflictDetected += HandleConflictDetected;
+            turnAnimator.OnCombatOccurred += HandleCombatOccurred;
 
-            // Initialize conflict resolution UI
+            // Initialize conflict resolution UI and combat results UI
             Canvas canvas = FindObjectOfType<Canvas>();
             if (canvas != null)
             {
@@ -113,6 +115,11 @@ namespace PlunkAndPlunder.Core
                 conflictUIObj.transform.SetParent(canvas.transform, false);
                 conflictResolutionUI = conflictUIObj.AddComponent<ConflictResolutionUI>();
                 conflictResolutionUI.Initialize();
+
+                GameObject combatResultsUIObj = new GameObject("CombatResultsUI");
+                combatResultsUIObj.transform.SetParent(canvas.transform, false);
+                combatResultsUI = combatResultsUIObj.AddComponent<CombatResultsUI>();
+                combatResultsUI.Initialize();
             }
 
             // Place starting units for each player
@@ -411,6 +418,37 @@ namespace PlunkAndPlunder.Core
                 Debug.Log("[GameManager] Continuing to combat");
                 turnAnimator.ResumeAnimation();
             }
+        }
+
+        private void HandleCombatOccurred(CombatOccurredEvent combatEvent)
+        {
+            Debug.Log($"[GameManager] Combat occurred: {combatEvent.attackerId} vs {combatEvent.defenderId}");
+
+            // Pause animation
+            turnAnimator.PauseAnimation();
+
+            // Get units involved (may be destroyed by combat, so check)
+            Unit attacker = state.unitManager.GetUnit(combatEvent.attackerId);
+            Unit defender = state.unitManager.GetUnit(combatEvent.defenderId);
+
+            if (attacker == null || defender == null)
+            {
+                Debug.LogWarning($"[GameManager] Could not find units for combat: {combatEvent.attackerId} or {combatEvent.defenderId}");
+                turnAnimator.ResumeAnimation();
+                return;
+            }
+
+            // Show combat results UI
+            if (combatResultsUI != null)
+            {
+                combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue);
+            }
+        }
+
+        private void OnCombatResultsContinue()
+        {
+            Debug.Log("[GameManager] Player acknowledged combat results, resuming animation");
+            turnAnimator.ResumeAnimation();
         }
 
         public Pathfinding GetPathfinding() => pathfinding;

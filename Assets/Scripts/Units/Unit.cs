@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using PlunkAndPlunder.Map;
 using UnityEngine;
 
@@ -15,6 +16,7 @@ namespace PlunkAndPlunder.Units
         public int maxHealth;
         public float facingAngle; // Rotation angle in degrees (0 = facing right/east)
         public int movementRemaining; // Movement remaining this turn
+        public List<HexCoord> queuedPath; // Path queued from previous turn (for multi-turn moves)
 
         public Unit(string id, int ownerId, HexCoord position, UnitType type)
         {

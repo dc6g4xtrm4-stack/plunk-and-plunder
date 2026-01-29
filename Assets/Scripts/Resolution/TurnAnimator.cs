@@ -24,6 +24,7 @@ namespace PlunkAndPlunder.Resolution
         public event Action<GameState> OnAnimationStep; // Fired after each animation step
         public event Action OnAnimationComplete; // Fired when all animations done
         public event Action<ConflictDetectedEvent> OnConflictDetected; // Fired when conflict is detected during animation
+        public event Action<CombatOccurredEvent> OnCombatOccurred; // Fired when combat occurs
 
         private void Awake()
         {
@@ -123,12 +124,14 @@ namespace PlunkAndPlunder.Resolution
         /// <summary>
         /// Check if a unit at a position has any conflicts with enemy units
         /// Returns a ConflictDetectedEvent if conflicts are found, null otherwise
+        /// Only detects same-hex collisions (not adjacent units - those are handled by combat resolution)
         /// </summary>
         private ConflictDetectedEvent CheckForConflicts(Unit unit, HexCoord position)
         {
             List<string> conflictingUnitIds = new List<string>();
 
-            // Check for units at the same position
+            // Check for units at the same position ONLY
+            // Adjacent combat is resolved automatically via ResolveCombat() in TurnResolver
             List<Unit> unitsAtPosition = unitManager.GetUnitsAtPosition(position);
             foreach (Unit otherUnit in unitsAtPosition)
             {
@@ -140,28 +143,6 @@ namespace PlunkAndPlunder.Resolution
                 if (otherUnit.ownerId != unit.ownerId)
                 {
                     conflictingUnitIds.Add(otherUnit.id);
-                }
-            }
-
-            // Check for units in adjacent hexes
-            foreach (HexCoord adjacentCoord in position.GetNeighbors())
-            {
-                List<Unit> adjacentUnits = unitManager.GetUnitsAtPosition(adjacentCoord);
-                foreach (Unit adjacentUnit in adjacentUnits)
-                {
-                    // Skip self (shouldn't happen but safety check)
-                    if (adjacentUnit.id == unit.id)
-                        continue;
-
-                    // Check if enemy
-                    if (adjacentUnit.ownerId != unit.ownerId)
-                    {
-                        // Only add if not already in the list
-                        if (!conflictingUnitIds.Contains(adjacentUnit.id))
-                        {
-                            conflictingUnitIds.Add(adjacentUnit.id);
-                        }
-                    }
                 }
             }
 
@@ -318,15 +299,17 @@ namespace PlunkAndPlunder.Resolution
         {
             Debug.Log($"[TurnAnimator] Animating combat: {combatEvent.attackerId} vs {combatEvent.defenderId}");
 
-            // TODO: Show combat indicator (red flashing on both units)
-            // TODO: Show dice roll results
-            // TODO: Display damage numbers
+            // Fire event to notify GameManager to show combat results UI
+            OnCombatOccurred?.Invoke(combatEvent);
 
             // Trigger visual update
             OnAnimationStep?.Invoke(state);
 
-            // Pause to show combat
-            yield return new WaitForSeconds(combatPauseDelay * 2);
+            // Wait while paused (combat results UI will be shown)
+            while (isPaused)
+            {
+                yield return new WaitForSeconds(0.1f);
+            }
 
             // If units were destroyed, they should be removed by subsequent UnitDestroyedEvent
         }

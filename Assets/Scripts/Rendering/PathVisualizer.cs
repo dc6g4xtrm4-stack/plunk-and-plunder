@@ -113,37 +113,21 @@ namespace PlunkAndPlunder.Rendering
             // Create "future turns" line renderer if path extends beyond this turn
             if (futurePath != null && futurePath.Count > 1)
             {
-                pathData.futureLineRenderer = pathData.pathObject.AddComponent<LineRenderer>();
-
-                Material futureLineMaterial = new Material(shader);
-                Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
-                futureLineMaterial.color = futureColor;
-                pathData.futureLineRenderer.material = futureLineMaterial;
-
-                // Configure "future turns" line renderer
-                pathData.futureLineRenderer.startWidth = lineWidth * 0.8f;
-                pathData.futureLineRenderer.endWidth = lineWidth * 0.8f;
-                pathData.futureLineRenderer.positionCount = futurePath.Count;
-                pathData.futureLineRenderer.useWorldSpace = true;
-
-                // Set "future turns" line positions
-                for (int i = 0; i < futurePath.Count; i++)
-                {
-                    Vector3 worldPos = futurePath[i].ToWorldPosition(hexSize);
-                    worldPos.y = pathHeight + 0.01f; // Slightly higher to avoid z-fighting
-                    pathData.futureLineRenderer.SetPosition(i, worldPos);
-                }
+                // Create dotted line segments with gaps instead of solid line
+                // We'll create multiple short LineRenderers with gaps between them
+                CreateDottedPath(futurePath, pathData, isPrimary);
 
                 // Add fewer arrows for future path, and they're smaller/dimmer
                 if (isPrimary)
                 {
+                    Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
                     AddFutureDirectionArrows(futurePath, pathData, futureColor);
                 }
             }
 
             paths[unitId] = pathData;
 
-            Debug.Log($"[PathVisualizer] Added {(isPrimary ? "primary" : "secondary")} path for {unitId} with {path.Count} waypoints");
+            Debug.Log($"[PathVisualizer] Added {(isPrimary ? "primary" : "secondary")} path for {unitId} with {path.Count} waypoints. Total paths now: {paths.Count}");
         }
 
         /// <summary>
@@ -239,6 +223,124 @@ namespace PlunkAndPlunder.Rendering
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Create a dotted path by making multiple short line segments with gaps
+        /// </summary>
+        private void CreateDottedPath(List<HexCoord> path, PathData pathData, bool isPrimary)
+        {
+            // Create a container for dotted line segments
+            GameObject dottedContainer = new GameObject("DottedPath");
+            dottedContainer.transform.SetParent(pathData.pathObject.transform);
+
+            // Calculate total path length
+            float totalPathLength = 0f;
+            List<float> segmentLengths = new List<float>();
+
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector3 start = path[i].ToWorldPosition(hexSize);
+                Vector3 end = path[i + 1].ToWorldPosition(hexSize);
+                float length = Vector3.Distance(start, end);
+                segmentLengths.Add(length);
+                totalPathLength += length;
+            }
+
+            // Dotted pattern: dash length and gap length
+            float dashLength = 0.3f;
+            float gapLength = 0.2f;
+            float patternLength = dashLength + gapLength;
+
+            // Find shader
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader == null)
+                shader = Shader.Find("Unlit/Color");
+            if (shader == null)
+                shader = Shader.Find("Standard");
+
+            Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
+
+            // Walk along the path and create dash segments
+            float currentDistance = 0f;
+            int pathSegmentIndex = 0;
+            float distanceIntoCurrentSegment = 0f;
+
+            while (pathSegmentIndex < path.Count - 1)
+            {
+                // Get current path segment
+                Vector3 segmentStart = path[pathSegmentIndex].ToWorldPosition(hexSize);
+                Vector3 segmentEnd = path[pathSegmentIndex + 1].ToWorldPosition(hexSize);
+                float segmentLength = segmentLengths[pathSegmentIndex];
+                Vector3 segmentDirection = (segmentEnd - segmentStart).normalized;
+
+                // Calculate how much of current pattern (dash + gap) we can fit
+                float remainingInSegment = segmentLength - distanceIntoCurrentSegment;
+
+                // Determine if we're in dash or gap phase
+                float positionInPattern = currentDistance % patternLength;
+                bool inDashPhase = positionInPattern < dashLength;
+
+                if (inDashPhase)
+                {
+                    // Create a dash
+                    float dashStart = distanceIntoCurrentSegment;
+                    float dashRemaining = dashLength - positionInPattern;
+                    float dashEnd = Mathf.Min(distanceIntoCurrentSegment + dashRemaining, segmentLength);
+
+                    // Create line renderer for this dash
+                    GameObject dashObj = new GameObject("Dash");
+                    dashObj.transform.SetParent(dottedContainer.transform);
+                    LineRenderer dashRenderer = dashObj.AddComponent<LineRenderer>();
+
+                    Material dashMaterial = new Material(shader);
+                    dashMaterial.color = futureColor;
+                    dashRenderer.material = dashMaterial;
+
+                    dashRenderer.startWidth = lineWidth * 0.8f;
+                    dashRenderer.endWidth = lineWidth * 0.8f;
+                    dashRenderer.positionCount = 2;
+                    dashRenderer.useWorldSpace = true;
+
+                    Vector3 dashStartPos = segmentStart + segmentDirection * dashStart;
+                    Vector3 dashEndPos = segmentStart + segmentDirection * dashEnd;
+                    dashStartPos.y = pathHeight + 0.01f;
+                    dashEndPos.y = pathHeight + 0.01f;
+
+                    dashRenderer.SetPosition(0, dashStartPos);
+                    dashRenderer.SetPosition(1, dashEndPos);
+
+                    // Advance
+                    float dashActualLength = dashEnd - dashStart;
+                    currentDistance += dashActualLength;
+                    distanceIntoCurrentSegment += dashActualLength;
+                }
+                else
+                {
+                    // In gap phase, just skip forward
+                    float gapRemaining = gapLength - (positionInPattern - dashLength);
+                    float gapAdvance = Mathf.Min(gapRemaining, remainingInSegment);
+
+                    currentDistance += gapAdvance;
+                    distanceIntoCurrentSegment += gapAdvance;
+                }
+
+                // Move to next segment if we've completed this one
+                if (distanceIntoCurrentSegment >= segmentLength)
+                {
+                    pathSegmentIndex++;
+                    distanceIntoCurrentSegment = 0f;
+                }
+
+                // Safety check to prevent infinite loop
+                if (currentDistance > totalPathLength + patternLength)
+                    break;
+            }
+
+            // Store reference to dotted container as futureLineRenderer (for cleanup)
+            // We'll use a dummy LineRenderer just to hold the reference for cleanup
+            pathData.futureLineRenderer = dottedContainer.AddComponent<LineRenderer>();
+            pathData.futureLineRenderer.enabled = false; // Disable it since we don't actually use it
         }
 
         /// <summary>

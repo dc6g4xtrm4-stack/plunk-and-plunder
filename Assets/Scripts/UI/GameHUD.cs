@@ -557,12 +557,100 @@ namespace PlunkAndPlunder.UI
                 {
                     pathVisualizer.ClearAllPaths();
                 }
+
+                // Restore remaining paths from previous turn's incomplete moves
+                RestoreRemainingPaths();
             }
         }
 
         private void HandleTurnResolved(List<GameEvent> events)
         {
             eventLog?.AddEvents(events);
+
+            // Store remaining paths from partial movement events for next turn
+            StoreRemainingPathsFromEvents(events);
+        }
+
+        /// <summary>
+        /// Store remaining paths from UnitMovedEvents that had partial movement
+        /// </summary>
+        private void StoreRemainingPathsFromEvents(List<GameEvent> events)
+        {
+            if (GameManager.Instance?.state == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            foreach (GameEvent evt in events)
+            {
+                if (evt is UnitMovedEvent moveEvent)
+                {
+                    // Only care about human player's units
+                    Unit unit = state.unitManager.GetUnit(moveEvent.unitId);
+                    if (unit == null || unit.ownerId != 0)
+                        continue;
+
+                    // If this was a partial move with remaining path, store it
+                    if (moveEvent.isPartialMove && moveEvent.remainingPath != null && moveEvent.remainingPath.Count > 1)
+                    {
+                        // Note: We don't add it to pendingMovePaths yet - that happens in RestoreRemainingPaths
+                        // Just log for debugging
+                        Debug.Log($"[GameHUD] Unit {moveEvent.unitId} has {moveEvent.remainingPath.Count - 1} tiles remaining for next turn");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Restore remaining paths from units that had incomplete movement last turn
+        /// This makes the previously "dotted" segments become "solid" for the new turn
+        /// </summary>
+        private void RestoreRemainingPaths()
+        {
+            if (GameManager.Instance?.state == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            // Get all human player units
+            List<Unit> humanUnits = state.unitManager.GetAllUnits().FindAll(u => u.ownerId == 0);
+
+            int restoredCount = 0;
+
+            foreach (Unit unit in humanUnits)
+            {
+                // Check if this unit has a queued path from the previous turn
+                if (unit.queuedPath != null && unit.queuedPath.Count > 1)
+                {
+                    // Automatically queue a move order with the remaining path
+                    MoveOrder order = new MoveOrder(unit.id, 0, unit.queuedPath);
+                    pendingPlayerOrders.Add(order);
+
+                    // Track that this unit has an order
+                    unitsWithOrders.Add(unit.id);
+
+                    // Store the path for visualization
+                    pendingMovePaths[unit.id] = unit.queuedPath;
+
+                    restoredCount++;
+
+                    Debug.Log($"[GameHUD] Restored queued path for unit {unit.id}: {unit.queuedPath.Count - 1} tiles");
+
+                    // Clear the queued path from the unit (it's now in pending orders)
+                    unit.queuedPath = null;
+                }
+            }
+
+            if (restoredCount > 0)
+            {
+                Debug.Log($"[GameHUD] Restored {restoredCount} queued paths from previous turn");
+
+                // Update visualizations to show restored paths
+                if (pathVisualizer != null)
+                {
+                    UpdatePathVisualizations();
+                }
+            }
         }
 
         /// <summary>
@@ -575,10 +663,11 @@ namespace PlunkAndPlunder.UI
 
             GameState state = GameManager.Instance.state;
 
-            // Clear all paths first (we'll re-add them)
-            // Note: We don't use ClearAllPaths() because we're about to re-add them
+            // Don't clear all paths - PathVisualizer.AddPath() handles per-unit clearing
+            // Clearing all would remove paths we're about to re-add
 
             // Add all pending move paths
+            int pathsAdded = 0;
             foreach (var kvp in pendingMovePaths)
             {
                 string unitId = kvp.Key;
@@ -586,20 +675,25 @@ namespace PlunkAndPlunder.UI
 
                 // Get the unit to determine its movement capacity
                 Unit unit = state.unitManager.GetUnit(unitId);
-                int movementCapacity = 3; // Default
-                if (unit != null)
+                if (unit == null)
                 {
-                    movementCapacity = unit.GetMovementCapacity();
+                    Debug.LogWarning($"[GameHUD] Unit {unitId} not found for path visualization");
+                    continue;
                 }
+
+                int movementCapacity = unit.GetMovementCapacity();
 
                 // Determine if this is the primary path (currently selected unit)
                 bool isPrimary = (selectedUnit != null && selectedUnit.id == unitId);
 
                 // Add or update the path with movement capacity
                 pathVisualizer.AddPath(unitId, path, isPrimary, movementCapacity);
+                pathsAdded++;
+
+                Debug.Log($"[GameHUD] Added path for {unitId}: {path.Count} waypoints, {(isPrimary ? "PRIMARY" : "secondary")}, capacity={movementCapacity}");
             }
 
-            Debug.Log($"[GameHUD] Updated path visualizations: {pendingMovePaths.Count} paths, primary={selectedUnit?.id ?? "none"}");
+            Debug.Log($"[GameHUD] Updated path visualizations: {pathsAdded}/{pendingMovePaths.Count} paths added, primary={selectedUnit?.id ?? "none"}");
         }
 
         /// <summary>

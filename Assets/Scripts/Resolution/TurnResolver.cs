@@ -205,6 +205,9 @@ namespace PlunkAndPlunder.Resolution
                         // Update unit's movement remaining
                         unit.movementRemaining = movementRemaining;
 
+                        // Store remaining path in the unit for next turn
+                        unit.queuedPath = remaining;
+
                         // Create move event with partial movement info
                         bool isPartial = remaining != null && remaining.Count > 1;
                         events.Add(new UnitMovedEvent(
