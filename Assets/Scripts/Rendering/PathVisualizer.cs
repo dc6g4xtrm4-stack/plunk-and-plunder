@@ -281,20 +281,25 @@ namespace PlunkAndPlunder.Rendering
             GameObject dottedContainer = new GameObject("DottedPath");
             dottedContainer.transform.SetParent(pathData.pathObject.transform);
 
-            // Calculate total path length
-            float totalPathLength = 0f;
-            List<float> segmentLengths = new List<float>();
+            // Build cumulative distance array for each waypoint
+            List<float> cumulativeDistances = new List<float>();
+            List<Vector3> worldPositions = new List<Vector3>();
 
-            for (int i = 0; i < path.Count - 1; i++)
+            cumulativeDistances.Add(0f);
+            worldPositions.Add(path[0].ToWorldPosition(hexSize));
+
+            float totalPathLength = 0f;
+            for (int i = 1; i < path.Count; i++)
             {
-                Vector3 start = path[i].ToWorldPosition(hexSize);
-                Vector3 end = path[i + 1].ToWorldPosition(hexSize);
-                float length = Vector3.Distance(start, end);
-                segmentLengths.Add(length);
-                totalPathLength += length;
+                Vector3 prevPos = path[i - 1].ToWorldPosition(hexSize);
+                Vector3 currPos = path[i].ToWorldPosition(hexSize);
+                float segmentLength = Vector3.Distance(prevPos, currPos);
+                totalPathLength += segmentLength;
+                cumulativeDistances.Add(totalPathLength);
+                worldPositions.Add(currPos);
             }
 
-            Debug.Log($"[PathVisualizer] Calculated {segmentLengths.Count} segment lengths, total path length={totalPathLength}");
+            Debug.Log($"[PathVisualizer] Calculated total path length={totalPathLength}");
 
             // Dotted pattern: dash length and gap length
             float dashLength = 0.3f;
@@ -310,111 +315,84 @@ namespace PlunkAndPlunder.Rendering
 
             Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
 
-            // Walk along the path and create dash segments
-            float currentDistance = 0f;
-            int pathSegmentIndex = 0;
-            float distanceIntoCurrentSegment = 0f;
-            int iterations = 0;
-            int maxIterations = 1000; // Safety limit
+            // Calculate number of complete patterns we can fit
+            int numDashes = Mathf.CeilToInt(totalPathLength / patternLength);
+            Debug.Log($"[PathVisualizer] Creating {numDashes} dashes along path");
 
-            Debug.Log($"[PathVisualizer] Starting dotted path generation loop");
-
-            while (pathSegmentIndex < path.Count - 1)
+            // Create each dash by calculating its start and end positions
+            for (int dashIndex = 0; dashIndex < numDashes; dashIndex++)
             {
-                // Safety check for infinite loop
-                iterations++;
-                if (iterations > maxIterations)
-                {
-                    Debug.LogError($"[PathVisualizer] SAFETY BREAK: Exceeded {maxIterations} iterations in CreateDottedPath loop!");
-                    Debug.LogError($"  pathSegmentIndex={pathSegmentIndex}, currentDistance={currentDistance}, totalPathLength={totalPathLength}");
+                float dashStartDistance = dashIndex * patternLength;
+                float dashEndDistance = Mathf.Min(dashStartDistance + dashLength, totalPathLength);
+
+                // Skip if dash is beyond path length
+                if (dashStartDistance >= totalPathLength)
                     break;
-                }
 
-                // Bounds check for segmentLengths array access
-                if (pathSegmentIndex < 0 || pathSegmentIndex >= segmentLengths.Count)
-                {
-                    Debug.LogError($"[PathVisualizer] BOUNDS ERROR: pathSegmentIndex={pathSegmentIndex} out of range [0, {segmentLengths.Count})");
-                    break;
-                }
+                // Find the world positions for dash start and end
+                Vector3 dashStartPos = GetPositionAtDistance(dashStartDistance, worldPositions, cumulativeDistances);
+                Vector3 dashEndPos = GetPositionAtDistance(dashEndDistance, worldPositions, cumulativeDistances);
 
-                // Get current path segment
-                Vector3 segmentStart = path[pathSegmentIndex].ToWorldPosition(hexSize);
-                Vector3 segmentEnd = path[pathSegmentIndex + 1].ToWorldPosition(hexSize);
-                float segmentLength = segmentLengths[pathSegmentIndex];
-                Vector3 segmentDirection = (segmentEnd - segmentStart).normalized;
+                // Create line renderer for this dash
+                GameObject dashObj = new GameObject($"Dash_{dashIndex}");
+                dashObj.transform.SetParent(dottedContainer.transform);
+                LineRenderer dashRenderer = dashObj.AddComponent<LineRenderer>();
 
-                // Calculate how much of current pattern (dash + gap) we can fit
-                float remainingInSegment = segmentLength - distanceIntoCurrentSegment;
+                Material dashMaterial = new Material(shader);
+                dashMaterial.color = futureColor;
+                dashRenderer.material = dashMaterial;
 
-                // Determine if we're in dash or gap phase
-                float positionInPattern = currentDistance % patternLength;
-                bool inDashPhase = positionInPattern < dashLength;
+                dashRenderer.startWidth = lineWidth * 0.8f;
+                dashRenderer.endWidth = lineWidth * 0.8f;
+                dashRenderer.positionCount = 2;
+                dashRenderer.useWorldSpace = true;
 
-                if (inDashPhase)
-                {
-                    // Create a dash
-                    float dashStart = distanceIntoCurrentSegment;
-                    float dashRemaining = dashLength - positionInPattern;
-                    float dashEnd = Mathf.Min(distanceIntoCurrentSegment + dashRemaining, segmentLength);
+                dashStartPos.y = pathHeight + 0.01f;
+                dashEndPos.y = pathHeight + 0.01f;
 
-                    // Create line renderer for this dash
-                    GameObject dashObj = new GameObject("Dash");
-                    dashObj.transform.SetParent(dottedContainer.transform);
-                    LineRenderer dashRenderer = dashObj.AddComponent<LineRenderer>();
-
-                    Material dashMaterial = new Material(shader);
-                    dashMaterial.color = futureColor;
-                    dashRenderer.material = dashMaterial;
-
-                    dashRenderer.startWidth = lineWidth * 0.8f;
-                    dashRenderer.endWidth = lineWidth * 0.8f;
-                    dashRenderer.positionCount = 2;
-                    dashRenderer.useWorldSpace = true;
-
-                    Vector3 dashStartPos = segmentStart + segmentDirection * dashStart;
-                    Vector3 dashEndPos = segmentStart + segmentDirection * dashEnd;
-                    dashStartPos.y = pathHeight + 0.01f;
-                    dashEndPos.y = pathHeight + 0.01f;
-
-                    dashRenderer.SetPosition(0, dashStartPos);
-                    dashRenderer.SetPosition(1, dashEndPos);
-
-                    // Advance
-                    float dashActualLength = dashEnd - dashStart;
-                    currentDistance += dashActualLength;
-                    distanceIntoCurrentSegment += dashActualLength;
-                }
-                else
-                {
-                    // In gap phase, just skip forward
-                    float gapRemaining = gapLength - (positionInPattern - dashLength);
-                    float gapAdvance = Mathf.Min(gapRemaining, remainingInSegment);
-
-                    currentDistance += gapAdvance;
-                    distanceIntoCurrentSegment += gapAdvance;
-                }
-
-                // Move to next segment if we've completed this one
-                if (distanceIntoCurrentSegment >= segmentLength)
-                {
-                    pathSegmentIndex++;
-                    distanceIntoCurrentSegment = 0f;
-                }
-
-                // Safety check to prevent infinite loop
-                if (currentDistance > totalPathLength + patternLength)
-                {
-                    Debug.LogWarning($"[PathVisualizer] Safety exit: currentDistance={currentDistance} exceeds totalPathLength={totalPathLength} + pattern");
-                    break;
-                }
+                dashRenderer.SetPosition(0, dashStartPos);
+                dashRenderer.SetPosition(1, dashEndPos);
             }
 
-            Debug.Log($"[PathVisualizer] Completed dotted path generation: {iterations} iterations");
+            Debug.Log($"[PathVisualizer] Completed dotted path generation");
 
             // Store reference to dotted container as futureLineRenderer (for cleanup)
             // We'll use a dummy LineRenderer just to hold the reference for cleanup
             pathData.futureLineRenderer = dottedContainer.AddComponent<LineRenderer>();
             pathData.futureLineRenderer.enabled = false; // Disable it since we don't actually use it
+        }
+
+        /// <summary>
+        /// Get world position at a specific distance along the path
+        /// </summary>
+        private Vector3 GetPositionAtDistance(float distance, List<Vector3> worldPositions, List<float> cumulativeDistances)
+        {
+            // Handle edge cases
+            if (distance <= 0f)
+                return worldPositions[0];
+            if (distance >= cumulativeDistances[cumulativeDistances.Count - 1])
+                return worldPositions[worldPositions.Count - 1];
+
+            // Find which segment the distance falls into
+            for (int i = 1; i < cumulativeDistances.Count; i++)
+            {
+                if (distance <= cumulativeDistances[i])
+                {
+                    // Interpolate between waypoint i-1 and i
+                    float segmentStartDist = cumulativeDistances[i - 1];
+                    float segmentEndDist = cumulativeDistances[i];
+                    float segmentLength = segmentEndDist - segmentStartDist;
+
+                    if (segmentLength < 0.0001f)
+                        return worldPositions[i - 1];
+
+                    float t = (distance - segmentStartDist) / segmentLength;
+                    return Vector3.Lerp(worldPositions[i - 1], worldPositions[i], t);
+                }
+            }
+
+            // Should never reach here, but return last position as fallback
+            return worldPositions[worldPositions.Count - 1];
         }
 
         /// <summary>
