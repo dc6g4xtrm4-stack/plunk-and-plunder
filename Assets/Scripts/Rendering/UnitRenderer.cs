@@ -25,6 +25,8 @@ namespace PlunkAndPlunder.Rendering
         };
 
         private Dictionary<string, GameObject> unitObjects = new Dictionary<string, GameObject>();
+        private Dictionary<string, GameObject> selectionIndicators = new Dictionary<string, GameObject>();
+        private Dictionary<string, int> unitUpgradeLevels = new Dictionary<string, int>(); // Track upgrade level for each unit
         private GameObject unitsContainer;
 
         private void Awake()
@@ -49,6 +51,7 @@ namespace PlunkAndPlunder.Rendering
             {
                 Destroy(unitObjects[unitId]);
                 unitObjects.Remove(unitId);
+                unitUpgradeLevels.Remove(unitId);
             }
 
             // Create/update units
@@ -65,7 +68,7 @@ namespace PlunkAndPlunder.Rendering
                 }
                 else
                 {
-                    UpdateUnitPosition(unit);
+                    UpdateUnitVisual(unit);
                     updated++;
                 }
             }
@@ -90,67 +93,153 @@ namespace PlunkAndPlunder.Rendering
             // Rotation based on facing
             unitObj.transform.rotation = Quaternion.Euler(0, unit.facingAngle, 0);
 
-            // Create ship model
-            CreateShipModel(unitObj, unit.ownerId);
+            // Create ship model with upgrade level based on maxHealth
+            int upgradeLevel = unit.maxHealth; // 1 = tier 1, 2 = tier 2, 3 = tier 3
+            CreateShipModel(unitObj, unit.ownerId, upgradeLevel);
+            unitUpgradeLevels[unit.id] = upgradeLevel;
 
             unitObjects[unit.id] = unitObj;
         }
 
-        private void CreateShipModel(GameObject parent, int ownerId)
+        private void CreateShipModel(GameObject parent, int ownerId, int upgradeLevel = 1)
         {
             Color playerColor = GetPlayerColor(ownerId);
             Color brownHull = new Color(0.4f, 0.25f, 0.1f); // Brown wood color
-            Color sailColor = new Color(0.9f, 0.85f, 0.75f); // Off-white sail
+            Color darkHull = new Color(0.3f, 0.2f, 0.08f); // Darker hull for cannons
+            Color sailColor = playerColor; // Sails use player color
 
-            // 1. Create Hull (brown boat body) - stretched cube
+            // Scale factors based on upgrade level
+            float scaleMultiplier = 1.0f;
+            if (upgradeLevel == 2) scaleMultiplier = 1.3f;
+            else if (upgradeLevel >= 3) scaleMultiplier = 1.6f;
+
+            // 1. Create Hull (brown boat body) - stretched cube, scales with upgrade
             GameObject hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
             hull.name = "Hull";
             hull.transform.SetParent(parent.transform);
             hull.transform.localPosition = new Vector3(0, 0, 0);
-            hull.transform.localScale = new Vector3(0.5f, 0.15f, 0.3f); // Wide and long
+            hull.transform.localScale = new Vector3(0.5f * scaleMultiplier, 0.15f, 0.3f * scaleMultiplier);
             hull.transform.localRotation = Quaternion.identity;
             SetMaterialColor(hull, brownHull);
 
-            // 2. Create Bow (front pointed part) - scaled cube rotated to create point
+            // 2. Create Bow (front pointed part)
             GameObject bow = GameObject.CreatePrimitive(PrimitiveType.Cube);
             bow.name = "Bow";
             bow.transform.SetParent(parent.transform);
-            bow.transform.localPosition = new Vector3(0.35f, 0, 0);
-            bow.transform.localScale = new Vector3(0.2f, 0.12f, 0.2f);
-            bow.transform.localRotation = Quaternion.Euler(0, 45, 0); // Angled to create pointed bow
+            bow.transform.localPosition = new Vector3(0.35f * scaleMultiplier, 0, 0);
+            bow.transform.localScale = new Vector3(0.2f * scaleMultiplier, 0.12f, 0.2f * scaleMultiplier);
+            bow.transform.localRotation = Quaternion.Euler(0, 45, 0);
             SetMaterialColor(bow, brownHull);
 
-            // 3. Create Mast (vertical pole) - thin cylinder
+            // 3. Create Mast(s) - number depends on upgrade level
+            if (upgradeLevel == 1)
+            {
+                // Tier 1: Single mast
+                CreateMastWithSail(parent, new Vector3(0, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+            }
+            else if (upgradeLevel == 2)
+            {
+                // Tier 2: Two masts
+                CreateMastWithSail(parent, new Vector3(-0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+
+                // Add cannons (2-3 small cylinders on sides)
+                CreateCannons(parent, 3, scaleMultiplier, darkHull);
+            }
+            else if (upgradeLevel >= 3)
+            {
+                // Tier 3: Three masts
+                CreateMastWithSail(parent, new Vector3(-0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(0, 0.4f, 0), 0.4f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+
+                // Add more cannons (4-6 cylinders on sides)
+                CreateCannons(parent, 6, scaleMultiplier, darkHull);
+
+                // Add decorative elements - additional flags
+                CreateExtraFlags(parent, 2, scaleMultiplier, playerColor);
+            }
+        }
+
+        private void CreateMastWithSail(GameObject parent, Vector3 position, float mastHeight, Color sailColor, Color flagColor, Color mastColor, float scale)
+        {
+            // Mast (vertical pole)
             GameObject mast = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             mast.name = "Mast";
             mast.transform.SetParent(parent.transform);
-            mast.transform.localPosition = new Vector3(0, 0.35f, 0);
-            mast.transform.localScale = new Vector3(0.04f, 0.35f, 0.04f); // Thin and tall
-            SetMaterialColor(mast, brownHull);
+            mast.transform.localPosition = position;
+            mast.transform.localScale = new Vector3(0.04f, mastHeight, 0.04f);
+            SetMaterialColor(mast, mastColor);
 
-            // 4. Create Sail (white/cream colored cube) - flat and wide
+            // Sail (flat rectangle)
             GameObject sail = GameObject.CreatePrimitive(PrimitiveType.Cube);
             sail.name = "Sail";
             sail.transform.SetParent(parent.transform);
-            sail.transform.localPosition = new Vector3(0, 0.35f, 0);
-            sail.transform.localScale = new Vector3(0.3f, 0.4f, 0.05f); // Flat rectangle
+            sail.transform.localPosition = position;
+            sail.transform.localScale = new Vector3(0.3f * scale, 0.4f, 0.05f);
             SetMaterialColor(sail, sailColor);
 
-            // 5. Create Flag at top - small cube with player color
+            // Flag at top
             GameObject flag = GameObject.CreatePrimitive(PrimitiveType.Cube);
             flag.name = "Flag";
             flag.transform.SetParent(parent.transform);
-            flag.transform.localPosition = new Vector3(0, 0.65f, 0); // At top of mast
-            flag.transform.localScale = new Vector3(0.15f, 0.1f, 0.02f); // Small flag
-            SetMaterialColor(flag, playerColor);
+            flag.transform.localPosition = position + new Vector3(0, mastHeight + 0.25f, 0);
+            flag.transform.localScale = new Vector3(0.08f, 0.06f, 0.02f);
+            SetMaterialColor(flag, flagColor);
 
-            // 6. Create flag pole (tiny cylinder connecting mast to flag)
+            // Flag pole
             GameObject flagPole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             flagPole.name = "FlagPole";
             flagPole.transform.SetParent(parent.transform);
-            flagPole.transform.localPosition = new Vector3(0, 0.6f, 0);
+            flagPole.transform.localPosition = position + new Vector3(0, mastHeight + 0.2f, 0);
             flagPole.transform.localScale = new Vector3(0.02f, 0.08f, 0.02f);
-            SetMaterialColor(flagPole, brownHull);
+            SetMaterialColor(flagPole, mastColor);
+        }
+
+        private void CreateCannons(GameObject parent, int count, float scale, Color cannonColor)
+        {
+            // Create small dark cylinders protruding from sides as cannons
+            float spacing = 0.3f * scale / Mathf.Max(1, count - 1);
+            float startZ = -0.15f * scale;
+
+            for (int i = 0; i < count; i++)
+            {
+                float zPos = startZ + (i * spacing);
+
+                // Left side cannon
+                GameObject cannonLeft = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                cannonLeft.name = $"Cannon_L_{i}";
+                cannonLeft.transform.SetParent(parent.transform);
+                cannonLeft.transform.localPosition = new Vector3(-0.25f * scale, 0.05f, zPos);
+                cannonLeft.transform.localRotation = Quaternion.Euler(0, 0, 90); // Rotate to point sideways
+                cannonLeft.transform.localScale = new Vector3(0.03f, 0.08f, 0.03f);
+                SetMaterialColor(cannonLeft, cannonColor);
+
+                // Right side cannon
+                GameObject cannonRight = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                cannonRight.name = $"Cannon_R_{i}";
+                cannonRight.transform.SetParent(parent.transform);
+                cannonRight.transform.localPosition = new Vector3(0.25f * scale, 0.05f, zPos);
+                cannonRight.transform.localRotation = Quaternion.Euler(0, 0, 90);
+                cannonRight.transform.localScale = new Vector3(0.03f, 0.08f, 0.03f);
+                SetMaterialColor(cannonRight, cannonColor);
+            }
+        }
+
+        private void CreateExtraFlags(GameObject parent, int count, float scale, Color flagColor)
+        {
+            // Add decorative flags on the hull sides
+            for (int i = 0; i < count; i++)
+            {
+                float xPos = -0.2f * scale + (i * 0.4f * scale);
+
+                GameObject flag = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                flag.name = $"DecorFlag_{i}";
+                flag.transform.SetParent(parent.transform);
+                flag.transform.localPosition = new Vector3(xPos, 0.25f, -0.18f * scale);
+                flag.transform.localScale = new Vector3(0.06f, 0.05f, 0.02f);
+                SetMaterialColor(flag, flagColor);
+            }
         }
 
         private void SetMaterialColor(GameObject obj, Color color)
@@ -158,9 +247,44 @@ namespace PlunkAndPlunder.Rendering
             MeshRenderer renderer = obj.GetComponent<MeshRenderer>();
             if (renderer != null)
             {
-                Material mat = new Material(Shader.Find("Standard"));
+                Shader shader = Shader.Find("Standard") ?? Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Unlit/Color");
+                Material mat = new Material(shader);
                 mat.color = color;
                 renderer.material = mat;
+            }
+        }
+
+        private void UpdateUnitVisual(Unit unit)
+        {
+            if (unitObjects.TryGetValue(unit.id, out GameObject unitObj))
+            {
+                Vector3 worldPos = unit.position.ToWorldPosition(hexSize);
+                worldPos.y = unitHeight;
+                unitObj.transform.position = worldPos;
+
+                // Update rotation based on facing direction
+                unitObj.transform.rotation = Quaternion.Euler(0, unit.facingAngle, 0);
+
+                // Check if upgrade level changed (ship was upgraded)
+                int currentUpgradeLevel = unit.maxHealth;
+                if (unitUpgradeLevels.TryGetValue(unit.id, out int previousUpgradeLevel))
+                {
+                    if (currentUpgradeLevel != previousUpgradeLevel)
+                    {
+                        // Ship was upgraded! Rebuild the visual
+                        Debug.Log($"[UnitRenderer] Ship {unit.id} upgraded from tier {previousUpgradeLevel} to tier {currentUpgradeLevel}");
+
+                        // Destroy old ship parts
+                        foreach (Transform child in unitObj.transform)
+                        {
+                            Destroy(child.gameObject);
+                        }
+
+                        // Recreate ship with new upgrade level
+                        CreateShipModel(unitObj, unit.ownerId, currentUpgradeLevel);
+                        unitUpgradeLevels[unit.id] = currentUpgradeLevel;
+                    }
+                }
             }
         }
 
@@ -205,8 +329,9 @@ namespace PlunkAndPlunder.Rendering
                             Destroy(child.gameObject);
                         }
 
-                        // Recreate ship with correct colors
-                        CreateShipModel(unitObj, unit.ownerId);
+                        // Recreate ship with correct colors and upgrade level
+                        int upgradeLevel = unit.maxHealth;
+                        CreateShipModel(unitObj, unit.ownerId, upgradeLevel);
                     }
                 }
             }
@@ -221,6 +346,92 @@ namespace PlunkAndPlunder.Rendering
             return Color.gray;
         }
 
+        public void AddTemporaryHighlight(string unitId, float duration = 4f)
+        {
+            if (unitObjects.TryGetValue(unitId, out GameObject unitObj))
+            {
+                // Add or get the highlight effect component
+                TemporaryHighlight highlight = unitObj.GetComponent<TemporaryHighlight>();
+                if (highlight == null)
+                {
+                    highlight = unitObj.AddComponent<TemporaryHighlight>();
+                }
+                highlight.StartHighlight(duration);
+            }
+        }
+
+        /// <summary>
+        /// Show a selection indicator under the specified unit
+        /// </summary>
+        public void ShowSelectionIndicator(string unitId)
+        {
+            // Remove any existing selection indicator
+            HideSelectionIndicator();
+
+            if (!unitObjects.TryGetValue(unitId, out GameObject unitObj))
+                return;
+
+            // Create selection indicator - a glowing ring at the base
+            GameObject indicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            indicator.name = "SelectionIndicator";
+
+            // Position at base of unit
+            indicator.transform.position = new Vector3(
+                unitObj.transform.position.x,
+                0.05f, // Just above water
+                unitObj.transform.position.z
+            );
+
+            // Make it a flat ring shape
+            indicator.transform.localScale = new Vector3(0.8f, 0.02f, 0.8f);
+
+            // Set bright cyan/white color
+            MeshRenderer renderer = indicator.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                Shader shader = Shader.Find("Standard") ?? Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Unlit/Color");
+                Material mat = new Material(shader);
+                mat.color = new Color(0f, 1f, 1f, 0.8f); // Bright cyan
+
+                // Enable emission if Standard shader
+                if (shader.name == "Standard")
+                {
+                    mat.EnableKeyword("_EMISSION");
+                    mat.SetColor("_EmissionColor", new Color(0f, 0.5f, 0.5f, 1f));
+                }
+
+                renderer.material = mat;
+            }
+
+            // Remove collider
+            Collider collider = indicator.GetComponent<Collider>();
+            if (collider != null)
+            {
+                Destroy(collider);
+            }
+
+            selectionIndicators[unitId] = indicator;
+
+            // Add pulsing animation
+            SelectionPulse pulse = indicator.AddComponent<SelectionPulse>();
+            pulse.Initialize();
+        }
+
+        /// <summary>
+        /// Hide the current selection indicator
+        /// </summary>
+        public void HideSelectionIndicator()
+        {
+            foreach (var kvp in selectionIndicators)
+            {
+                if (kvp.Value != null)
+                {
+                    Destroy(kvp.Value);
+                }
+            }
+            selectionIndicators.Clear();
+        }
+
         private void OnDestroy()
         {
             foreach (GameObject unitObj in unitObjects.Values)
@@ -228,6 +439,8 @@ namespace PlunkAndPlunder.Rendering
                 Destroy(unitObj);
             }
             unitObjects.Clear();
+
+            HideSelectionIndicator();
         }
     }
 }

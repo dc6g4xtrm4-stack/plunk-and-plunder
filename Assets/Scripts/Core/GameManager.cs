@@ -6,6 +6,7 @@ using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Networking;
 using PlunkAndPlunder.Orders;
 using PlunkAndPlunder.Players;
+using PlunkAndPlunder.Rendering;
 using PlunkAndPlunder.Resolution;
 using PlunkAndPlunder.Structures;
 using PlunkAndPlunder.Units;
@@ -209,6 +210,12 @@ namespace PlunkAndPlunder.Core
 
             Debug.Log($"[GameManager] Turn {state.turnNumber} - Planning phase started");
 
+            // Initialize player view on first turn
+            if (state.turnNumber == 1)
+            {
+                InitializePlayerView();
+            }
+
             // Trigger AI planning
             if (aiController != null)
             {
@@ -330,6 +337,74 @@ namespace PlunkAndPlunder.Core
                         SubmitOrders(player.id, new List<IOrder>());
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Initialize camera and highlight player assets at game start
+        /// Called on first turn only
+        /// </summary>
+        private void InitializePlayerView()
+        {
+            // Find Player 0 (human player)
+            Player humanPlayer = state.playerManager.GetPlayer(0);
+            if (humanPlayer == null)
+            {
+                Debug.LogWarning("[GameManager] Could not find human player (Player 0) for camera initialization");
+                return;
+            }
+
+            Debug.Log($"[GameManager] Initializing view for {humanPlayer.name} (Player {humanPlayer.id})");
+
+            // Find player's shipyard
+            Structure playerShipyard = null;
+            foreach (Structure structure in state.structureManager.GetAllStructures())
+            {
+                if (structure.type == StructureType.SHIPYARD && structure.ownerId == humanPlayer.id)
+                {
+                    playerShipyard = structure;
+                    break;
+                }
+            }
+
+            if (playerShipyard != null)
+            {
+                // Move camera to focus on player's shipyard
+                Vector3 shipyardWorldPos = playerShipyard.position.ToWorldPosition(1f); // hexSize = 1f
+                CameraController cameraController = Camera.main?.GetComponent<CameraController>();
+                if (cameraController != null)
+                {
+                    cameraController.FocusOnPosition(shipyardWorldPos, smooth: true);
+                    Debug.Log($"[GameManager] Camera focusing on player shipyard at {playerShipyard.position}");
+                }
+
+                // Highlight player's shipyard
+                BuildingRenderer buildingRenderer = FindObjectOfType<BuildingRenderer>();
+                if (buildingRenderer != null)
+                {
+                    buildingRenderer.AddTemporaryHighlight(playerShipyard.id, duration: 5f);
+                    Debug.Log($"[GameManager] Highlighting player shipyard");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] Could not find player's shipyard for camera initialization");
+            }
+
+            // Highlight player's ships
+            UnitRenderer unitRenderer = FindObjectOfType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                int highlightedShips = 0;
+                foreach (Unit unit in state.unitManager.GetAllUnits())
+                {
+                    if (unit.ownerId == humanPlayer.id)
+                    {
+                        unitRenderer.AddTemporaryHighlight(unit.id, duration: 5f);
+                        highlightedShips++;
+                    }
+                }
+                Debug.Log($"[GameManager] Highlighted {highlightedShips} player ships");
             }
         }
     }

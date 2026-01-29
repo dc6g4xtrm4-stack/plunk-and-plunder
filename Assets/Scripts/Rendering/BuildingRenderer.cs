@@ -109,16 +109,18 @@ namespace PlunkAndPlunder.Rendering
             buildingObj.transform.position = worldPos;
 
             // Color by player (brown base, player-colored flag)
+            Shader shader = Shader.Find("Standard") ?? Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Unlit/Color");
             Color brownColor = new Color(0.6f, 0.4f, 0.2f);
-            Material baseMat = new Material(Shader.Find("Standard"));
+
+            Material baseMat = new Material(shader);
             baseMat.color = brownColor;
             baseObj.GetComponent<MeshRenderer>().material = baseMat;
 
-            Material towerMat = new Material(Shader.Find("Standard"));
+            Material towerMat = new Material(shader);
             towerMat.color = brownColor;
             towerObj.GetComponent<MeshRenderer>().material = towerMat;
 
-            Material flagMat = new Material(Shader.Find("Standard"));
+            Material flagMat = new Material(shader);
             flagMat.color = GetPlayerColor(structure.ownerId);
             flagObj.GetComponent<MeshRenderer>().material = flagMat;
 
@@ -179,6 +181,20 @@ namespace PlunkAndPlunder.Rendering
                 return playerColors[playerId];
             }
             return Color.gray; // Neutral color
+        }
+
+        public void AddTemporaryHighlight(string structureId, float duration = 4f)
+        {
+            if (buildingObjects.TryGetValue(structureId, out GameObject buildingObj))
+            {
+                // Add or get the highlight effect component
+                TemporaryHighlight highlight = buildingObj.GetComponent<TemporaryHighlight>();
+                if (highlight == null)
+                {
+                    highlight = buildingObj.AddComponent<TemporaryHighlight>();
+                }
+                highlight.StartHighlight(duration);
+            }
         }
 
         private void OnDestroy()

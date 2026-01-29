@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using PlunkAndPlunder.Core;
 using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Orders;
+using PlunkAndPlunder.Rendering;
 using PlunkAndPlunder.Structures;
 using PlunkAndPlunder.Units;
 using UnityEngine;
@@ -29,10 +30,22 @@ namespace PlunkAndPlunder.UI
         private List<HexCoord> plannedPath;
         private List<IOrder> pendingPlayerOrders = new List<IOrder>();
 
+        // Visualization components
+        private PathVisualizer pathVisualizer;
+
         public void Initialize()
         {
             CreateLayout();
             SubscribeToEvents();
+            InitializeVisualizers();
+        }
+
+        private void InitializeVisualizers()
+        {
+            // Create path visualizer
+            GameObject pathVisualizerObj = new GameObject("PathVisualizer");
+            pathVisualizerObj.transform.SetParent(transform, false);
+            pathVisualizer = pathVisualizerObj.AddComponent<PathVisualizer>();
         }
 
         private void CreateLayout()
@@ -293,6 +306,13 @@ namespace PlunkAndPlunder.UI
             string tileInfo = tile != null ? $"Tile: {tile.type}" : "Tile: Unknown";
 
             selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{tileInfo}";
+
+            // Show selection indicator
+            var unitRenderer = FindObjectOfType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                unitRenderer.ShowSelectionIndicator(unit.id);
+            }
         }
 
         private void SelectStructure(Structure structure)
@@ -303,6 +323,19 @@ namespace PlunkAndPlunder.UI
 
             string ownerText = structure.ownerId == -1 ? "Neutral" : $"Player {structure.ownerId}";
             selectedUnitText.text = $"STRUCTURE\nID: {structure.id}\nOwner: {ownerText}\nPosition: {structure.position}\nType: {structure.type}";
+
+            // Hide selection indicator when selecting a structure
+            var unitRenderer = FindObjectOfType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                unitRenderer.HideSelectionIndicator();
+            }
+
+            // Clear path visualization
+            if (pathVisualizer != null)
+            {
+                pathVisualizer.ClearPath();
+            }
         }
 
         private void ClearSelection()
@@ -311,6 +344,19 @@ namespace PlunkAndPlunder.UI
             selectedStructure = null;
             plannedPath = null;
             selectedUnitText.text = "No selection";
+
+            // Hide selection indicator
+            var unitRenderer = FindObjectOfType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                unitRenderer.HideSelectionIndicator();
+            }
+
+            // Clear path visualization
+            if (pathVisualizer != null)
+            {
+                pathVisualizer.ClearPath();
+            }
         }
 
         private void SetUnitDestination(HexCoord destination)
@@ -335,6 +381,12 @@ namespace PlunkAndPlunder.UI
 
                 Debug.Log($"[GameHUD] Planned path for {selectedUnit.id}: {path.Count} steps");
                 selectedUnitText.text += "\n\nMove order queued!";
+
+                // Visualize the path
+                if (pathVisualizer != null)
+                {
+                    pathVisualizer.ShowPath(path);
+                }
             }
         }
 
@@ -350,6 +402,12 @@ namespace PlunkAndPlunder.UI
             pendingPlayerOrders.Clear();
             ClearSelection();
             selectedUnitText.text = "Orders submitted!";
+
+            // Clear path visualization
+            if (pathVisualizer != null)
+            {
+                pathVisualizer.ClearPath();
+            }
         }
 
         private void OnAutoResolveClicked()
@@ -423,6 +481,12 @@ namespace PlunkAndPlunder.UI
             {
                 pendingPlayerOrders.Clear();
                 ClearSelection();
+
+                // Clear path visualization
+                if (pathVisualizer != null)
+                {
+                    pathVisualizer.ClearPath();
+                }
             }
         }
 

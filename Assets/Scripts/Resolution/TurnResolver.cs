@@ -547,12 +547,12 @@ namespace PlunkAndPlunder.Resolution
                     continue;
                 }
 
-                // Check if ship is already upgraded
-                if (ship.maxHealth >= BuildingConfig.UPGRADED_SHIP_MAX_HEALTH)
+                // Check if ship is already at max tier
+                if (ship.maxHealth >= BuildingConfig.MAX_SHIP_TIER)
                 {
                     if (enableLogging)
                     {
-                        Debug.LogWarning($"[TurnResolver] Ship {order.unitId} is already upgraded");
+                        Debug.LogWarning($"[TurnResolver] Ship {order.unitId} is already at max upgrade tier");
                     }
                     continue;
                 }
@@ -571,9 +571,9 @@ namespace PlunkAndPlunder.Resolution
                 // Deduct currency
                 player.gold -= BuildingConfig.UPGRADE_SHIP_COST;
 
-                // Upgrade ship
+                // Upgrade ship to next tier
                 int oldMaxHealth = ship.maxHealth;
-                ship.maxHealth = BuildingConfig.UPGRADED_SHIP_MAX_HEALTH;
+                ship.maxHealth = Mathf.Min(ship.maxHealth + 1, BuildingConfig.MAX_SHIP_TIER);
                 ship.health = ship.maxHealth; // Fully heal on upgrade
 
                 events.Add(new ShipUpgradedEvent(turnNumber, order.unitId, shipyard.id, order.playerId, oldMaxHealth, ship.maxHealth, BuildingConfig.UPGRADE_SHIP_COST));

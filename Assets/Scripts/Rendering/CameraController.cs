@@ -20,9 +20,14 @@ namespace PlunkAndPlunder.Rendering
         [Header("Drag")]
         public bool enableMiddleMouseDrag = true;
 
+        [Header("Smooth Movement")]
+        public float smoothMoveSpeed = 5f;
+
         private Camera cam;
         private Vector3 dragOrigin;
         private bool isDragging = false;
+        private Vector3 targetPosition;
+        private bool isMovingToTarget = false;
 
         private void Start()
         {
@@ -37,6 +42,7 @@ namespace PlunkAndPlunder.Rendering
             {
                 transform.rotation = Quaternion.Euler(70f, 0f, 0f);
                 transform.position = new Vector3(0f, 50f, -25f);
+                targetPosition = transform.position;
                 cam.fieldOfView = 75f;
                 cam.backgroundColor = Color.black; // Black background for contrast
                 cam.clearFlags = CameraClearFlags.SolidColor; // Use solid color instead of skybox
@@ -47,8 +53,25 @@ namespace PlunkAndPlunder.Rendering
 
         private void Update()
         {
+            HandleSmoothMovement();
             HandlePanning();
             HandleZoom();
+        }
+
+        private void HandleSmoothMovement()
+        {
+            if (isMovingToTarget)
+            {
+                transform.position = Vector3.Lerp(transform.position, targetPosition, smoothMoveSpeed * Time.deltaTime);
+
+                // Stop when close enough
+                if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
+                {
+                    transform.position = targetPosition;
+                    isMovingToTarget = false;
+                    Debug.Log("[CameraController] Reached target position");
+                }
+            }
         }
 
         private void HandlePanning()
@@ -117,12 +140,24 @@ namespace PlunkAndPlunder.Rendering
             }
         }
 
-        public void FocusOnPosition(Vector3 worldPosition)
+        public void FocusOnPosition(Vector3 worldPosition, bool smooth = false)
         {
             Vector3 newPos = transform.position;
             newPos.x = worldPosition.x;
             newPos.z = worldPosition.z - 10f; // Offset for camera angle
-            transform.position = newPos;
+
+            if (smooth)
+            {
+                targetPosition = newPos;
+                isMovingToTarget = true;
+                Debug.Log($"[CameraController] Smoothly moving camera to {worldPosition}");
+            }
+            else
+            {
+                transform.position = newPos;
+                targetPosition = newPos;
+                isMovingToTarget = false;
+            }
         }
     }
 }

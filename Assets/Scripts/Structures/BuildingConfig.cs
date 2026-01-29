@@ -12,7 +12,9 @@ namespace PlunkAndPlunder.Structures
         public const int DEPLOY_SHIPYARD_COST = 100;
 
         // Ship stats
-        public const int SHIP_MAX_HEALTH = 1; // MVP: simple 1 HP ships
-        public const int UPGRADED_SHIP_MAX_HEALTH = 2; // Upgraded ships get more HP
+        public const int SHIP_MAX_HEALTH = 1; // Base ships
+        public const int UPGRADED_SHIP_TIER_2_MAX_HEALTH = 2; // Tier 2 upgraded ships
+        public const int UPGRADED_SHIP_TIER_3_MAX_HEALTH = 3; // Tier 3 max upgraded ships
+        public const int MAX_SHIP_TIER = 3; // Maximum upgrade tier
     }
 }
