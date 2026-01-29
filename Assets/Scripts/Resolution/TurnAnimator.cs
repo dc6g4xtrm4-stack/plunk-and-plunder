@@ -120,6 +120,66 @@ namespace PlunkAndPlunder.Resolution
             OnAnimationComplete?.Invoke();
         }
 
+        /// <summary>
+        /// Check if a unit at a position has any conflicts with enemy units
+        /// Returns a ConflictDetectedEvent if conflicts are found, null otherwise
+        /// </summary>
+        private ConflictDetectedEvent CheckForConflicts(Unit unit, HexCoord position)
+        {
+            List<string> conflictingUnitIds = new List<string>();
+
+            // Check for units at the same position
+            List<Unit> unitsAtPosition = unitManager.GetUnitsAtPosition(position);
+            foreach (Unit otherUnit in unitsAtPosition)
+            {
+                // Skip self
+                if (otherUnit.id == unit.id)
+                    continue;
+
+                // Check if enemy
+                if (otherUnit.ownerId != unit.ownerId)
+                {
+                    conflictingUnitIds.Add(otherUnit.id);
+                }
+            }
+
+            // Check for units in adjacent hexes
+            foreach (HexCoord adjacentCoord in position.GetNeighbors())
+            {
+                List<Unit> adjacentUnits = unitManager.GetUnitsAtPosition(adjacentCoord);
+                foreach (Unit adjacentUnit in adjacentUnits)
+                {
+                    // Skip self (shouldn't happen but safety check)
+                    if (adjacentUnit.id == unit.id)
+                        continue;
+
+                    // Check if enemy
+                    if (adjacentUnit.ownerId != unit.ownerId)
+                    {
+                        // Only add if not already in the list
+                        if (!conflictingUnitIds.Contains(adjacentUnit.id))
+                        {
+                            conflictingUnitIds.Add(adjacentUnit.id);
+                        }
+                    }
+                }
+            }
+
+            // If conflicts found, create event
+            if (conflictingUnitIds.Count > 0)
+            {
+                // Add the moving unit itself
+                conflictingUnitIds.Add(unit.id);
+
+                Debug.Log($"[TurnAnimator] Conflict detected at {position}: {conflictingUnitIds.Count} units involved");
+
+                // Use turn number 0 for conflicts detected during animation (actual turn number not available)
+                return new ConflictDetectedEvent(0, conflictingUnitIds, position);
+            }
+
+            return null;
+        }
+
         private IEnumerator AnimateMovement(UnitMovedEvent moveEvent, GameState state)
         {
             Unit unit = unitManager.GetUnit(moveEvent.unitId);
@@ -135,6 +195,14 @@ namespace PlunkAndPlunder.Resolution
                 // No path, just move instantly
                 unitManager.MoveUnit(moveEvent.unitId, moveEvent.to);
                 OnAnimationStep?.Invoke(state);
+
+                // Check for conflicts at final position
+                ConflictDetectedEvent conflict = CheckForConflicts(unit, moveEvent.to);
+                if (conflict != null)
+                {
+                    yield return AnimateConflictDetected(conflict, state);
+                }
+
                 yield break;
             }
 
@@ -156,6 +224,13 @@ namespace PlunkAndPlunder.Resolution
 
                 // Trigger visual update
                 OnAnimationStep?.Invoke(state);
+
+                // Check for conflicts at this position
+                ConflictDetectedEvent conflict = CheckForConflicts(unit, nextPos);
+                if (conflict != null)
+                {
+                    yield return AnimateConflictDetected(conflict, state);
+                }
 
                 // Wait before next step (except for the last step)
                 if (i < path.Count - 1)

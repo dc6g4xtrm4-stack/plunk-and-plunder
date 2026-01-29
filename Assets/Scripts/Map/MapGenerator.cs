@@ -73,8 +73,36 @@ namespace PlunkAndPlunder.Map
                 int islandSize = random.Next(minIslandSize, maxIslandSize + 1);
                 List<HexCoord> islandTiles = GenerateIsland(islandCenter, islandSize, seaCoords, usedCoords);
 
+                // Find tiles adjacent to sea (valid harbor locations)
+                List<int> validHarborIndices = new List<int>();
+                for (int i = 0; i < islandTiles.Count; i++)
+                {
+                    HexCoord coord = islandTiles[i];
+                    // Check if any neighbor is a sea tile
+                    foreach (HexCoord neighbor in coord.GetNeighbors())
+                    {
+                        if (seaCoords.Contains(neighbor) && !usedCoords.Contains(neighbor))
+                        {
+                            validHarborIndices.Add(i);
+                            break; // This tile is valid, no need to check other neighbors
+                        }
+                    }
+                }
+
+                // Pick harbor from valid locations (or fallback to any tile if none found)
+                int harborIndex;
+                if (validHarborIndices.Count > 0)
+                {
+                    harborIndex = validHarborIndices[random.Next(validHarborIndices.Count)];
+                }
+                else
+                {
+                    // Fallback: pick the tile closest to the edge (should rarely happen)
+                    Debug.LogWarning($"[MapGenerator] Island {islandId} has no sea-adjacent tiles, using fallback");
+                    harborIndex = random.Next(islandTiles.Count);
+                }
+
                 // Convert tiles to LAND and add one HARBOR
-                int harborIndex = random.Next(islandTiles.Count);
                 for (int i = 0; i < islandTiles.Count; i++)
                 {
                     HexCoord coord = islandTiles[i];

@@ -239,6 +239,11 @@ namespace PlunkAndPlunder.Resolution
             HashSet<string> unitsProcessed = new HashSet<string>();
             HashSet<string> unitsToDestroy = new HashSet<string>();
 
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] Checking combat for {allUnits.Count} units");
+            }
+
             // Check each pair of units for combat
             for (int i = 0; i < allUnits.Count; i++)
             {
@@ -257,6 +262,12 @@ namespace PlunkAndPlunder.Resolution
 
                     // Check if adjacent
                     int distance = unitA.position.Distance(unitB.position);
+
+                    if (enableLogging && distance <= 2)
+                    {
+                        Debug.Log($"[TurnResolver] Units {unitA.id} (Player {unitA.ownerId}) at {unitA.position} and {unitB.id} (Player {unitB.ownerId}) at {unitB.position} are distance {distance} apart");
+                    }
+
                     if (distance == 1)
                     {
                         // Resolve dice-based combat
@@ -264,7 +275,7 @@ namespace PlunkAndPlunder.Resolution
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] {result}");
+                            Debug.Log($"[TurnResolver] Combat triggered! {result}");
                         }
 
                         // Apply damage
@@ -299,6 +310,11 @@ namespace PlunkAndPlunder.Resolution
                         }
                     }
                 }
+            }
+
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] Combat resolution complete: {events.Count / 2} combats occurred, {unitsToDestroy.Count} units destroyed");
             }
 
             // Create destruction events (sort IDs for determinism)
