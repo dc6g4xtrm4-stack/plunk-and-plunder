@@ -369,10 +369,10 @@ namespace PlunkAndPlunder.Orders
                 return false;
             }
 
-            // Check unit is not already upgraded
-            if (unit.maxHealth >= BuildingConfig.UPGRADED_SHIP_MAX_HEALTH)
+            // Check unit is not already at max tier
+            if (unit.maxHealth >= BuildingConfig.UPGRADED_SHIP_TIER_3_MAX_HEALTH)
             {
-                error = "Unit is already upgraded";
+                error = "Unit is already at maximum tier";
                 return false;
             }
 
