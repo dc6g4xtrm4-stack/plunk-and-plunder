@@ -15,6 +15,7 @@ namespace PlunkAndPlunder.Resolution
     {
         private UnitManager unitManager;
         private bool isAnimating = false;
+        private bool isPaused = false;
 
         public float hexStepDelay = 0.25f; // Time to move one hex
         public float combatPauseDelay = 0.5f; // Time to pause for combat
@@ -22,6 +23,7 @@ namespace PlunkAndPlunder.Resolution
 
         public event Action<GameState> OnAnimationStep; // Fired after each animation step
         public event Action OnAnimationComplete; // Fired when all animations done
+        public event Action<ConflictDetectedEvent> OnConflictDetected; // Fired when conflict is detected during animation
 
         private void Awake()
         {
@@ -34,6 +36,16 @@ namespace PlunkAndPlunder.Resolution
         }
 
         public bool IsAnimating => isAnimating;
+
+        public void PauseAnimation()
+        {
+            isPaused = true;
+        }
+
+        public void ResumeAnimation()
+        {
+            isPaused = false;
+        }
 
         /// <summary>
         /// Start animating a list of game events
@@ -85,6 +97,14 @@ namespace PlunkAndPlunder.Resolution
 
                     case ShipUpgradedEvent upgradeEvent:
                         yield return AnimateShipUpgraded(upgradeEvent, state);
+                        break;
+
+                    case CombatOccurredEvent combatEvent:
+                        yield return AnimateCombat(combatEvent, state);
+                        break;
+
+                    case ConflictDetectedEvent conflictEvent:
+                        yield return AnimateConflictDetected(conflictEvent, state);
                         break;
 
                     default:
@@ -217,6 +237,37 @@ namespace PlunkAndPlunder.Resolution
             OnAnimationStep?.Invoke(state);
 
             yield return new WaitForSeconds(eventPauseDelay);
+        }
+
+        private IEnumerator AnimateCombat(CombatOccurredEvent combatEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating combat: {combatEvent.attackerId} vs {combatEvent.defenderId}");
+
+            // TODO: Show combat indicator (red flashing on both units)
+            // TODO: Show dice roll results
+            // TODO: Display damage numbers
+
+            // Trigger visual update
+            OnAnimationStep?.Invoke(state);
+
+            // Pause to show combat
+            yield return new WaitForSeconds(combatPauseDelay * 2);
+
+            // If units were destroyed, they should be removed by subsequent UnitDestroyedEvent
+        }
+
+        private IEnumerator AnimateConflictDetected(ConflictDetectedEvent conflictEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Conflict detected at {conflictEvent.position} with {conflictEvent.unitIds.Count} units");
+
+            // Fire event to notify GameManager
+            OnConflictDetected?.Invoke(conflictEvent);
+
+            // Wait while paused (conflict resolution UI will be shown)
+            while (isPaused)
+            {
+                yield return new WaitForSeconds(0.1f);
+            }
         }
     }
 }

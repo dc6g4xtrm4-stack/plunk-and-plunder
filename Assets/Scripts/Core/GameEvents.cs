@@ -30,7 +30,9 @@ namespace PlunkAndPlunder.Core
         ShipyardDeployed,
         ShipBuilt,
         ShipRepaired,
-        ShipUpgraded
+        ShipUpgraded,
+        CombatOccurred,
+        ConflictDetected
     }
 
     [Serializable]
@@ -39,15 +41,25 @@ namespace PlunkAndPlunder.Core
         public string unitId;
         public HexCoord from;
         public HexCoord to;
-        public List<HexCoord> path; // Full path for animation
+        public List<HexCoord> path; // Full path for animation (only the portion moved this turn)
+        public bool isPartialMove; // Whether this is a partial move (path continues next turn)
+        public List<HexCoord> remainingPath; // Path remaining for next turn (if partial)
+        public int movementUsed; // How much movement was used
+        public int movementRemaining; // How much movement remains
 
-        public UnitMovedEvent(int turnNumber, string unitId, HexCoord from, HexCoord to, List<HexCoord> path = null)
-            : base(turnNumber, GameEventType.UnitMoved, $"Unit {unitId} moved from {from} to {to}")
+        public UnitMovedEvent(int turnNumber, string unitId, HexCoord from, HexCoord to, List<HexCoord> path = null,
+            bool isPartialMove = false, List<HexCoord> remainingPath = null, int movementUsed = 0, int movementRemaining = 0)
+            : base(turnNumber, GameEventType.UnitMoved,
+                isPartialMove ? $"Unit {unitId} moved {movementUsed} tiles (path continues)" : $"Unit {unitId} moved from {from} to {to}")
         {
             this.unitId = unitId;
             this.from = from;
             this.to = to;
             this.path = path;
+            this.isPartialMove = isPartialMove;
+            this.remainingPath = remainingPath;
+            this.movementUsed = movementUsed;
+            this.movementRemaining = movementRemaining;
         }
     }
 
@@ -174,6 +186,50 @@ namespace PlunkAndPlunder.Core
             this.oldMaxHealth = oldMaxHealth;
             this.newMaxHealth = newMaxHealth;
             this.cost = cost;
+        }
+    }
+
+    [Serializable]
+    public class CombatOccurredEvent : GameEvent
+    {
+        public string attackerId;
+        public string defenderId;
+        public int damageToAttacker;
+        public int damageToDefender;
+        public List<int> attackerRolls;
+        public List<int> defenderRolls;
+        public bool attackerDestroyed;
+        public bool defenderDestroyed;
+
+        public CombatOccurredEvent(int turnNumber, string attackerId, string defenderId,
+            int damageToAttacker, int damageToDefender,
+            List<int> attackerRolls, List<int> defenderRolls,
+            bool attackerDestroyed, bool defenderDestroyed)
+            : base(turnNumber, GameEventType.CombatOccurred,
+                $"Combat: {attackerId} vs {defenderId} - Damage: {damageToAttacker} to attacker, {damageToDefender} to defender")
+        {
+            this.attackerId = attackerId;
+            this.defenderId = defenderId;
+            this.damageToAttacker = damageToAttacker;
+            this.damageToDefender = damageToDefender;
+            this.attackerRolls = attackerRolls;
+            this.defenderRolls = defenderRolls;
+            this.attackerDestroyed = attackerDestroyed;
+            this.defenderDestroyed = defenderDestroyed;
+        }
+    }
+
+    [Serializable]
+    public class ConflictDetectedEvent : GameEvent
+    {
+        public List<string> unitIds;
+        public HexCoord position;
+
+        public ConflictDetectedEvent(int turnNumber, List<string> unitIds, HexCoord position)
+            : base(turnNumber, GameEventType.ConflictDetected, $"Conflict detected at {position} with {unitIds.Count} units")
+        {
+            this.unitIds = unitIds;
+            this.position = position;
         }
     }
 }

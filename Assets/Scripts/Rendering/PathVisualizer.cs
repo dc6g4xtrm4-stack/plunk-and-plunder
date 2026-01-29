@@ -14,6 +14,7 @@ namespace PlunkAndPlunder.Rendering
         public float pathHeight = 0.2f;
         public Color primaryPathColor = new Color(1f, 1f, 0f, 0.8f); // Solid yellow
         public Color secondaryPathColor = new Color(1f, 1f, 0f, 0.5f); // Semi-transparent yellow
+        public Color futurePathColor = new Color(1f, 1f, 0f, 0.3f); // Faint yellow for future turns
         public float lineWidth = 0.15f;
 
         private GameObject pathContainer;
@@ -23,8 +24,11 @@ namespace PlunkAndPlunder.Rendering
         {
             public GameObject pathObject;
             public LineRenderer lineRenderer;
+            public LineRenderer futureLineRenderer; // For future turns segment
             public List<GameObject> arrows;
+            public List<GameObject> futureArrows; // Arrows for future segment
             public bool isPrimary;
+            public int movementCapacity; // How many tiles can be moved this turn
         }
 
         private void Awake()
@@ -39,7 +43,8 @@ namespace PlunkAndPlunder.Rendering
         /// <param name="unitId">Unique identifier for the unit</param>
         /// <param name="path">The path to visualize</param>
         /// <param name="isPrimary">Whether this is the primary (selected) unit's path</param>
-        public void AddPath(string unitId, List<HexCoord> path, bool isPrimary)
+        /// <param name="movementCapacity">How many tiles the unit can move this turn (default 3)</param>
+        public void AddPath(string unitId, List<HexCoord> path, bool isPrimary, int movementCapacity = 3)
         {
             if (path == null || path.Count < 2)
             {
@@ -55,14 +60,22 @@ namespace PlunkAndPlunder.Rendering
             PathData pathData = new PathData
             {
                 isPrimary = isPrimary,
-                arrows = new List<GameObject>()
+                arrows = new List<GameObject>(),
+                futureArrows = new List<GameObject>(),
+                movementCapacity = movementCapacity
             };
 
             // Create path object
             pathData.pathObject = new GameObject($"Path_{unitId}");
             pathData.pathObject.transform.SetParent(pathContainer.transform);
 
-            // Create line renderer
+            // Calculate split point: first segment is up to movementCapacity moves
+            // Path includes starting position, so movementCapacity+1 points for "this turn"
+            int splitIndex = Mathf.Min(movementCapacity + 1, path.Count);
+            List<HexCoord> thisTurnPath = path.GetRange(0, splitIndex);
+            List<HexCoord> futurePath = splitIndex < path.Count ? path.GetRange(splitIndex - 1, path.Count - splitIndex + 1) : null;
+
+            // Create "this turn" line renderer
             pathData.lineRenderer = pathData.pathObject.AddComponent<LineRenderer>();
 
             // Find a suitable shader
@@ -77,24 +90,55 @@ namespace PlunkAndPlunder.Rendering
             lineMaterial.color = pathColor;
             pathData.lineRenderer.material = lineMaterial;
 
-            // Configure line renderer
+            // Configure "this turn" line renderer
             pathData.lineRenderer.startWidth = lineWidth;
             pathData.lineRenderer.endWidth = lineWidth;
-            pathData.lineRenderer.positionCount = path.Count;
+            pathData.lineRenderer.positionCount = thisTurnPath.Count;
             pathData.lineRenderer.useWorldSpace = true;
 
-            // Set line positions from path
-            for (int i = 0; i < path.Count; i++)
+            // Set "this turn" line positions
+            for (int i = 0; i < thisTurnPath.Count; i++)
             {
-                Vector3 worldPos = path[i].ToWorldPosition(hexSize);
+                Vector3 worldPos = thisTurnPath[i].ToWorldPosition(hexSize);
                 worldPos.y = pathHeight;
                 pathData.lineRenderer.SetPosition(i, worldPos);
             }
 
-            // Add direction arrows along the path (full arrows for primary, fewer/none for secondary)
+            // Add direction arrows for "this turn" segment (full arrows for primary)
             if (isPrimary)
             {
-                AddDirectionArrows(path, pathData, pathColor);
+                AddDirectionArrows(thisTurnPath, pathData, pathColor);
+            }
+
+            // Create "future turns" line renderer if path extends beyond this turn
+            if (futurePath != null && futurePath.Count > 1)
+            {
+                pathData.futureLineRenderer = pathData.pathObject.AddComponent<LineRenderer>();
+
+                Material futureLineMaterial = new Material(shader);
+                Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
+                futureLineMaterial.color = futureColor;
+                pathData.futureLineRenderer.material = futureLineMaterial;
+
+                // Configure "future turns" line renderer
+                pathData.futureLineRenderer.startWidth = lineWidth * 0.8f;
+                pathData.futureLineRenderer.endWidth = lineWidth * 0.8f;
+                pathData.futureLineRenderer.positionCount = futurePath.Count;
+                pathData.futureLineRenderer.useWorldSpace = true;
+
+                // Set "future turns" line positions
+                for (int i = 0; i < futurePath.Count; i++)
+                {
+                    Vector3 worldPos = futurePath[i].ToWorldPosition(hexSize);
+                    worldPos.y = pathHeight + 0.01f; // Slightly higher to avoid z-fighting
+                    pathData.futureLineRenderer.SetPosition(i, worldPos);
+                }
+
+                // Add fewer arrows for future path, and they're smaller/dimmer
+                if (isPrimary)
+                {
+                    AddFutureDirectionArrows(futurePath, pathData, futureColor);
+                }
             }
 
             paths[unitId] = pathData;
@@ -139,16 +183,46 @@ namespace PlunkAndPlunder.Rendering
             }
             pathData.arrows.Clear();
 
+            foreach (var arrow in pathData.futureArrows)
+            {
+                if (arrow != null)
+                    Destroy(arrow);
+            }
+            pathData.futureArrows.Clear();
+
+            // Update future line renderer color
+            if (pathData.futureLineRenderer != null)
+            {
+                Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
+                if (pathData.futureLineRenderer.material != null)
+                {
+                    pathData.futureLineRenderer.material.color = futureColor;
+                }
+            }
+
             // Add arrows only for primary paths
             if (isPrimary && pathData.lineRenderer != null && pathData.lineRenderer.positionCount > 1)
             {
-                List<HexCoord> path = new List<HexCoord>();
+                List<HexCoord> thisTurnPath = new List<HexCoord>();
                 for (int i = 0; i < pathData.lineRenderer.positionCount; i++)
                 {
                     Vector3 pos = pathData.lineRenderer.GetPosition(i);
-                    path.Add(HexCoord.FromWorldPosition(pos, hexSize));
+                    thisTurnPath.Add(HexCoord.FromWorldPosition(pos, hexSize));
                 }
-                AddDirectionArrows(path, pathData, pathColor);
+                AddDirectionArrows(thisTurnPath, pathData, pathColor);
+
+                // Add future arrows if there's a future path
+                if (pathData.futureLineRenderer != null && pathData.futureLineRenderer.positionCount > 1)
+                {
+                    List<HexCoord> futurePath = new List<HexCoord>();
+                    for (int i = 0; i < pathData.futureLineRenderer.positionCount; i++)
+                    {
+                        Vector3 pos = pathData.futureLineRenderer.GetPosition(i);
+                        futurePath.Add(HexCoord.FromWorldPosition(pos, hexSize));
+                    }
+                    Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
+                    AddFutureDirectionArrows(futurePath, pathData, futureColor);
+                }
             }
             else
             {
@@ -182,7 +256,7 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 direction = (nextPos - currentPos).normalized;
 
                 // Create small arrow
-                GameObject arrow = CreateArrow(currentPos, direction, pathData, color);
+                GameObject arrow = CreateArrow(currentPos, direction, pathData, color, 1.0f);
                 pathData.arrows.Add(arrow);
             }
 
@@ -192,15 +266,45 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 lastPos = path[path.Count - 1].ToWorldPosition(hexSize);
                 Vector3 prevPos = path[path.Count - 2].ToWorldPosition(hexSize);
                 Vector3 direction = (lastPos - prevPos).normalized;
-                GameObject arrow = CreateArrow(lastPos, direction, pathData, color);
+                GameObject arrow = CreateArrow(lastPos, direction, pathData, color, 1.0f);
                 pathData.arrows.Add(arrow);
+            }
+        }
+
+        /// <summary>
+        /// Add small arrow indicators for future turns (fewer, smaller arrows)
+        /// </summary>
+        private void AddFutureDirectionArrows(List<HexCoord> path, PathData pathData, Color color)
+        {
+            // Add arrows every 3rd waypoint for future path
+            for (int i = 2; i < path.Count - 1; i += 3)
+            {
+                Vector3 currentPos = path[i].ToWorldPosition(hexSize);
+                Vector3 nextPos = path[i + 1].ToWorldPosition(hexSize);
+
+                // Calculate direction
+                Vector3 direction = (nextPos - currentPos).normalized;
+
+                // Create smaller, dimmer arrow
+                GameObject arrow = CreateArrow(currentPos, direction, pathData, color, 0.7f);
+                pathData.futureArrows.Add(arrow);
+            }
+
+            // Add arrow at the end
+            if (path.Count >= 2)
+            {
+                Vector3 lastPos = path[path.Count - 1].ToWorldPosition(hexSize);
+                Vector3 prevPos = path[path.Count - 2].ToWorldPosition(hexSize);
+                Vector3 direction = (lastPos - prevPos).normalized;
+                GameObject arrow = CreateArrow(lastPos, direction, pathData, color, 0.7f);
+                pathData.futureArrows.Add(arrow);
             }
         }
 
         /// <summary>
         /// Create a simple arrow indicator
         /// </summary>
-        private GameObject CreateArrow(Vector3 position, Vector3 direction, PathData pathData, Color color)
+        private GameObject CreateArrow(Vector3 position, Vector3 direction, PathData pathData, Color color, float scale = 1.0f)
         {
             GameObject arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
             arrow.name = "PathArrow";
@@ -208,7 +312,7 @@ namespace PlunkAndPlunder.Rendering
 
             position.y = pathHeight + 0.05f; // Slightly above the line
             arrow.transform.position = position;
-            arrow.transform.localScale = new Vector3(0.2f, 0.05f, 0.3f);
+            arrow.transform.localScale = new Vector3(0.2f * scale, 0.05f * scale, 0.3f * scale);
 
             // Rotate to face direction
             if (direction != Vector3.zero)

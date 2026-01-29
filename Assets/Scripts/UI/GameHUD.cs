@@ -321,8 +321,33 @@ namespace PlunkAndPlunder.UI
             Tile tile = state.grid.GetTile(unit.position);
             string tileInfo = tile != null ? $"Tile: {tile.type}" : "Tile: Unknown";
 
+            // Get movement info
+            int movementCapacity = unit.GetMovementCapacity();
+            int movementRemaining = unit.movementRemaining;
+            string movementInfo = $"Movement: {movementRemaining}/{movementCapacity}";
+
+            // Get path info if unit has a pending order
+            string pathInfo = "";
+            if (pendingMovePaths.ContainsKey(unit.id))
+            {
+                List<HexCoord> path = pendingMovePaths[unit.id];
+                int pathLength = path.Count - 1; // Subtract 1 since path includes starting position
+                int thisTurnMoves = Mathf.Min(movementCapacity, pathLength);
+                int queuedMoves = Mathf.Max(0, pathLength - movementCapacity);
+
+                if (queuedMoves > 0)
+                {
+                    pathInfo = $"\nPath Length: {pathLength}\n({thisTurnMoves} this turn, {queuedMoves} queued)";
+                }
+                else
+                {
+                    pathInfo = $"\nPath Length: {pathLength}";
+                }
+            }
+
             string orderStatus = unitsWithOrders.Contains(unit.id) ? "\n[HAS ORDER]" : "";
-            selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{tileInfo}{orderStatus}";
+            string healthInfo = $"HP: {unit.health}/{unit.maxHealth}";
+            selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{healthInfo}\n{tileInfo}\n{movementInfo}{pathInfo}{orderStatus}";
 
             // Show selection indicator
             var unitRenderer = FindObjectOfType<UnitRenderer>();
@@ -545,8 +570,10 @@ namespace PlunkAndPlunder.UI
         /// </summary>
         private void UpdatePathVisualizations()
         {
-            if (pathVisualizer == null)
+            if (pathVisualizer == null || GameManager.Instance?.state == null)
                 return;
+
+            GameState state = GameManager.Instance.state;
 
             // Clear all paths first (we'll re-add them)
             // Note: We don't use ClearAllPaths() because we're about to re-add them
@@ -557,11 +584,19 @@ namespace PlunkAndPlunder.UI
                 string unitId = kvp.Key;
                 List<HexCoord> path = kvp.Value;
 
+                // Get the unit to determine its movement capacity
+                Unit unit = state.unitManager.GetUnit(unitId);
+                int movementCapacity = 3; // Default
+                if (unit != null)
+                {
+                    movementCapacity = unit.GetMovementCapacity();
+                }
+
                 // Determine if this is the primary path (currently selected unit)
                 bool isPrimary = (selectedUnit != null && selectedUnit.id == unitId);
 
-                // Add or update the path
-                pathVisualizer.AddPath(unitId, path, isPrimary);
+                // Add or update the path with movement capacity
+                pathVisualizer.AddPath(unitId, path, isPrimary, movementCapacity);
             }
 
             Debug.Log($"[GameHUD] Updated path visualizations: {pendingMovePaths.Count} paths, primary={selectedUnit?.id ?? "none"}");

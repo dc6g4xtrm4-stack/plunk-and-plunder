@@ -9,6 +9,7 @@ using PlunkAndPlunder.Players;
 using PlunkAndPlunder.Rendering;
 using PlunkAndPlunder.Resolution;
 using PlunkAndPlunder.Structures;
+using PlunkAndPlunder.UI;
 using PlunkAndPlunder.Units;
 using UnityEngine;
 
@@ -31,6 +32,7 @@ namespace PlunkAndPlunder.Core
         private OrderValidator orderValidator;
         private AIController aiController;
         private NetworkManager networkManager;
+        private ConflictResolutionUI conflictResolutionUI;
 
         // Events
         public event Action<GamePhase> OnPhaseChanged;
@@ -101,6 +103,17 @@ namespace PlunkAndPlunder.Core
             turnAnimator.Initialize(state.unitManager);
             turnAnimator.OnAnimationStep += HandleAnimationStep;
             turnAnimator.OnAnimationComplete += HandleAnimationComplete;
+            turnAnimator.OnConflictDetected += HandleConflictDetected;
+
+            // Initialize conflict resolution UI
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject conflictUIObj = new GameObject("ConflictResolutionUI");
+                conflictUIObj.transform.SetParent(canvas.transform, false);
+                conflictResolutionUI = conflictUIObj.AddComponent<ConflictResolutionUI>();
+                conflictResolutionUI.Initialize();
+            }
 
             // Place starting units for each player
             PlaceStartingUnits();
@@ -342,6 +355,61 @@ namespace PlunkAndPlunder.Core
             {
                 // Next turn
                 ChangePhase(GamePhase.Planning);
+            }
+        }
+
+        private void HandleConflictDetected(ConflictDetectedEvent conflictEvent)
+        {
+            Debug.Log($"[GameManager] Conflict detected at {conflictEvent.position}");
+
+            // Pause animation
+            turnAnimator.PauseAnimation();
+
+            // Gather involved units
+            List<Unit> involvedUnits = new List<Unit>();
+            foreach (string unitId in conflictEvent.unitIds)
+            {
+                Unit unit = state.unitManager.GetUnit(unitId);
+                if (unit != null)
+                {
+                    involvedUnits.Add(unit);
+                }
+            }
+
+            // Show conflict resolution UI
+            ConflictData conflictData = new ConflictData(involvedUnits, conflictEvent.position);
+            if (conflictResolutionUI != null)
+            {
+                conflictResolutionUI.ShowConflict(conflictData, OnConflictResolved);
+            }
+        }
+
+        private void OnConflictResolved(ConflictResolution resolution)
+        {
+            Debug.Log($"[GameManager] Conflict resolved: {resolution}");
+
+            if (resolution == ConflictResolution.Reroute)
+            {
+                // Cancel turn animation and return to planning phase
+                Debug.Log("[GameManager] Re-routing - cancelling turn and returning to planning");
+
+                // Stop animation
+                if (turnAnimator != null)
+                {
+                    StopAllCoroutines();
+                }
+
+                // Clear pending orders
+                state.pendingOrders.Clear();
+
+                // Return to planning phase
+                ChangePhase(GamePhase.Planning);
+            }
+            else if (resolution == ConflictResolution.Combat)
+            {
+                // Continue with combat - resume animation
+                Debug.Log("[GameManager] Continuing to combat");
+                turnAnimator.ResumeAnimation();
             }
         }
 

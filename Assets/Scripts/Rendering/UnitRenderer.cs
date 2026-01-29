@@ -26,6 +26,7 @@ namespace PlunkAndPlunder.Rendering
 
         private Dictionary<string, GameObject> unitObjects = new Dictionary<string, GameObject>();
         private Dictionary<string, GameObject> selectionIndicators = new Dictionary<string, GameObject>();
+        private Dictionary<string, GameObject> healthBars = new Dictionary<string, GameObject>();
         private Dictionary<string, int> unitUpgradeLevels = new Dictionary<string, int>(); // Track upgrade level for each unit
         private GameObject unitsContainer;
 
@@ -52,6 +53,13 @@ namespace PlunkAndPlunder.Rendering
                 Destroy(unitObjects[unitId]);
                 unitObjects.Remove(unitId);
                 unitUpgradeLevels.Remove(unitId);
+
+                // Clean up health bar
+                if (healthBars.ContainsKey(unitId))
+                {
+                    Destroy(healthBars[unitId]);
+                    healthBars.Remove(unitId);
+                }
             }
 
             // Create/update units
@@ -97,6 +105,9 @@ namespace PlunkAndPlunder.Rendering
             int upgradeLevel = unit.maxHealth; // 1 = tier 1, 2 = tier 2, 3 = tier 3
             CreateShipModel(unitObj, unit.ownerId, upgradeLevel);
             unitUpgradeLevels[unit.id] = upgradeLevel;
+
+            // Create health bar
+            CreateHealthBar(unit, unitObj);
 
             unitObjects[unit.id] = unitObj;
         }
@@ -285,6 +296,9 @@ namespace PlunkAndPlunder.Rendering
                         unitUpgradeLevels[unit.id] = currentUpgradeLevel;
                     }
                 }
+
+                // Update health bar
+                UpdateHealthBar(unit);
             }
         }
 
@@ -432,6 +446,70 @@ namespace PlunkAndPlunder.Rendering
             selectionIndicators.Clear();
         }
 
+        private void CreateHealthBar(Unit unit, GameObject parent)
+        {
+            // Create health bar container
+            GameObject healthBarContainer = new GameObject($"HealthBar_{unit.id}");
+            healthBarContainer.transform.SetParent(parent.transform);
+            healthBarContainer.transform.localPosition = new Vector3(0, 0.8f, 0); // Above ship
+
+            // Background (red bar)
+            GameObject background = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            background.name = "HealthBarBG";
+            background.transform.SetParent(healthBarContainer.transform);
+            background.transform.localPosition = Vector3.zero;
+            background.transform.localScale = new Vector3(0.6f, 0.08f, 0.02f);
+            SetMaterialColor(background, Color.red);
+            Destroy(background.GetComponent<Collider>()); // Remove collider
+
+            // Foreground (green bar)
+            GameObject foreground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            foreground.name = "HealthBarFG";
+            foreground.transform.SetParent(healthBarContainer.transform);
+            foreground.transform.localPosition = Vector3.zero;
+            foreground.transform.localScale = new Vector3(0.6f, 0.09f, 0.01f);
+            SetMaterialColor(foreground, Color.green);
+            Destroy(foreground.GetComponent<Collider>()); // Remove collider
+
+            // Make health bar always face camera
+            BillboardHealthBar billboard = healthBarContainer.AddComponent<BillboardHealthBar>();
+
+            healthBars[unit.id] = healthBarContainer;
+
+            // Initial update
+            UpdateHealthBar(unit);
+        }
+
+        private void UpdateHealthBar(Unit unit)
+        {
+            if (healthBars.TryGetValue(unit.id, out GameObject healthBarContainer))
+            {
+                Transform foreground = healthBarContainer.transform.Find("HealthBarFG");
+                if (foreground != null)
+                {
+                    // Calculate health percentage
+                    float healthPercent = (float)unit.health / unit.maxHealth;
+
+                    // Update foreground scale
+                    Vector3 scale = foreground.localScale;
+                    scale.x = 0.6f * healthPercent;
+                    foreground.localScale = scale;
+
+                    // Update position to align left
+                    Vector3 pos = foreground.localPosition;
+                    pos.x = -0.3f + (scale.x / 2f);
+                    foreground.localPosition = pos;
+
+                    // Update color based on health
+                    Color healthColor = Color.Lerp(Color.red, Color.green, healthPercent);
+                    SetMaterialColor(foreground.gameObject, healthColor);
+
+                    // Hide health bar if at full health
+                    healthBarContainer.SetActive(unit.health < unit.maxHealth);
+                }
+            }
+        }
+
         private void OnDestroy()
         {
             foreach (GameObject unitObj in unitObjects.Values)
@@ -440,7 +518,28 @@ namespace PlunkAndPlunder.Rendering
             }
             unitObjects.Clear();
 
+            foreach (GameObject healthBar in healthBars.Values)
+            {
+                Destroy(healthBar);
+            }
+            healthBars.Clear();
+
             HideSelectionIndicator();
+        }
+    }
+
+    /// <summary>
+    /// Makes the health bar always face the camera
+    /// </summary>
+    public class BillboardHealthBar : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            if (Camera.main != null)
+            {
+                transform.LookAt(Camera.main.transform);
+                transform.Rotate(0, 180, 0); // Flip to face camera correctly
+            }
         }
     }
 }

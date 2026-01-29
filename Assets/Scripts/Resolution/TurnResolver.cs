@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PlunkAndPlunder.Combat;
 using PlunkAndPlunder.Core;
 using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Orders;
@@ -17,6 +18,7 @@ namespace PlunkAndPlunder.Resolution
         private UnitManager unitManager;
         private PlayerManager playerManager;
         private StructureManager structureManager;
+        private CombatResolver combatResolver;
         private int turnNumber;
         private bool enableLogging;
 
@@ -27,6 +29,8 @@ namespace PlunkAndPlunder.Resolution
             this.playerManager = playerManager;
             this.structureManager = structureManager;
             this.enableLogging = enableLogging;
+            // Initialize combat resolver with a seed based on system time
+            this.combatResolver = new CombatResolver(UnityEngine.Random.Range(0, int.MaxValue));
         }
 
         /// <summary>
@@ -41,6 +45,9 @@ namespace PlunkAndPlunder.Resolution
             {
                 Debug.Log($"[TurnResolver] Resolving turn {turnNumber} with {orders.Count} orders");
             }
+
+            // Reset movement for all units at start of turn
+            ResetAllUnitMovement();
 
             // Sort orders by type priority and then by unit ID for determinism
             // Priority: DeployShipyard > BuildShip > RepairShip > UpgradeShip > Move
@@ -101,15 +108,41 @@ namespace PlunkAndPlunder.Resolution
         {
             List<GameEvent> events = new List<GameEvent>();
 
-            // Build a map of intended destinations and store paths
+            // Build a map of intended destinations (this turn only) and store paths
             Dictionary<string, HexCoord> intendedMoves = new Dictionary<string, HexCoord>();
             Dictionary<string, List<HexCoord>> movePaths = new Dictionary<string, List<HexCoord>>();
+            Dictionary<string, List<HexCoord>> remainingPaths = new Dictionary<string, List<HexCoord>>();
+
             foreach (MoveOrder order in moveOrders)
             {
                 if (order.path != null && order.path.Count > 1)
                 {
-                    intendedMoves[order.unitId] = order.destination;
-                    movePaths[order.unitId] = order.path;
+                    Unit unit = unitManager.GetUnit(order.unitId);
+                    if (unit == null)
+                        continue;
+
+                    // Get unit's movement capacity
+                    int movementCapacity = unit.GetMovementCapacity();
+
+                    // Calculate how much of the path can be executed this turn
+                    // Path includes starting position, so we need pathLength = path.Count - 1 moves
+                    int pathLength = order.path.Count - 1;
+                    int movesThisTurn = Mathf.Min(movementCapacity, pathLength);
+
+                    // Extract this turn's path (includes starting position + movesThisTurn hexes)
+                    List<HexCoord> thisTurnPath = order.path.GetRange(0, movesThisTurn + 1);
+                    HexCoord thisTurnDestination = thisTurnPath[thisTurnPath.Count - 1];
+
+                    intendedMoves[order.unitId] = thisTurnDestination;
+                    movePaths[order.unitId] = thisTurnPath;
+
+                    // If there's remaining path, store it
+                    if (movesThisTurn < pathLength)
+                    {
+                        // Remaining path starts at the destination of this turn (to maintain continuity)
+                        List<HexCoord> remaining = order.path.GetRange(movesThisTurn, pathLength - movesThisTurn + 1);
+                        remainingPaths[order.unitId] = remaining;
+                    }
                 }
             }
 
@@ -161,16 +194,34 @@ namespace PlunkAndPlunder.Resolution
                     if (unit != null)
                     {
                         HexCoord from = unit.position;
-                        List<HexCoord> path = movePaths.ContainsKey(unitId) ? movePaths[unitId] : null;
+                        List<HexCoord> thisTurnPath = movePaths.ContainsKey(unitId) ? movePaths[unitId] : null;
+                        List<HexCoord> remaining = remainingPaths.ContainsKey(unitId) ? remainingPaths[unitId] : null;
 
-                        // NOTE: We don't actually move the unit here anymore - TurnAnimator will do it
-                        // unitManager.MoveUnit(unitId, destination);
+                        // Calculate movement used
+                        int movementUsed = thisTurnPath != null ? thisTurnPath.Count - 1 : 0;
+                        int movementCapacity = unit.GetMovementCapacity();
+                        int movementRemaining = movementCapacity - movementUsed;
 
-                        events.Add(new UnitMovedEvent(turnNumber, unitId, from, destination, path));
+                        // Update unit's movement remaining
+                        unit.movementRemaining = movementRemaining;
+
+                        // Create move event with partial movement info
+                        bool isPartial = remaining != null && remaining.Count > 1;
+                        events.Add(new UnitMovedEvent(
+                            turnNumber, unitId, from, destination, thisTurnPath,
+                            isPartial, remaining, movementUsed, movementRemaining
+                        ));
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] Unit {unitId} scheduled to move from {from} to {destination}");
+                            if (isPartial)
+                            {
+                                Debug.Log($"[TurnResolver] Unit {unitId} moved {movementUsed}/{movementCapacity} tiles (partial move, {remaining.Count - 1} tiles remain)");
+                            }
+                            else
+                            {
+                                Debug.Log($"[TurnResolver] Unit {unitId} moved from {from} to {destination} ({movementUsed} tiles)");
+                            }
                         }
                     }
                 }
@@ -185,15 +236,20 @@ namespace PlunkAndPlunder.Resolution
 
             // Find all units with adjacent enemies
             List<Unit> allUnits = unitManager.GetAllUnits();
+            HashSet<string> unitsProcessed = new HashSet<string>();
             HashSet<string> unitsToDestroy = new HashSet<string>();
 
-            // Check each pair of units
+            // Check each pair of units for combat
             for (int i = 0; i < allUnits.Count; i++)
             {
                 for (int j = i + 1; j < allUnits.Count; j++)
                 {
                     Unit unitA = allUnits[i];
                     Unit unitB = allUnits[j];
+
+                    // Skip if already processed in combat this turn
+                    if (unitsProcessed.Contains(unitA.id) || unitsProcessed.Contains(unitB.id))
+                        continue;
 
                     // Skip if same owner
                     if (unitA.ownerId == unitB.ownerId)
@@ -203,13 +259,43 @@ namespace PlunkAndPlunder.Resolution
                     int distance = unitA.position.Distance(unitB.position);
                     if (distance == 1)
                     {
-                        // Combat rule: both units destroyed (simple MVP combat)
-                        unitsToDestroy.Add(unitA.id);
-                        unitsToDestroy.Add(unitB.id);
+                        // Resolve dice-based combat
+                        CombatResult result = combatResolver.ResolveCombat(unitA.id, unitB.id);
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] Combat: {unitA.id} vs {unitB.id} - both destroyed");
+                            Debug.Log($"[TurnResolver] {result}");
+                        }
+
+                        // Apply damage
+                        unitA.TakeDamage(result.damageToAttacker);
+                        unitB.TakeDamage(result.damageToDefender);
+
+                        // Create combat event
+                        events.Add(new CombatOccurredEvent(
+                            turnNumber,
+                            unitA.id,
+                            unitB.id,
+                            result.damageToAttacker,
+                            result.damageToDefender,
+                            result.attackerRolls,
+                            result.defenderRolls,
+                            unitA.IsDead(),
+                            unitB.IsDead()
+                        ));
+
+                        // Mark units as processed
+                        unitsProcessed.Add(unitA.id);
+                        unitsProcessed.Add(unitB.id);
+
+                        // Mark for destruction if dead
+                        if (unitA.IsDead())
+                        {
+                            unitsToDestroy.Add(unitA.id);
+                        }
+                        if (unitB.IsDead())
+                        {
+                            unitsToDestroy.Add(unitB.id);
                         }
                     }
                 }
@@ -576,9 +662,9 @@ namespace PlunkAndPlunder.Resolution
                 // Deduct currency
                 player.gold -= BuildingConfig.UPGRADE_SHIP_COST;
 
-                // Upgrade ship to next tier
+                // Upgrade ship to next tier (add 10 HP per upgrade)
                 int oldMaxHealth = ship.maxHealth;
-                ship.maxHealth = Mathf.Min(ship.maxHealth + 1, BuildingConfig.MAX_SHIP_TIER);
+                ship.maxHealth = Mathf.Min(ship.maxHealth + 10, BuildingConfig.MAX_SHIP_TIER);
                 ship.health = ship.maxHealth; // Fully heal on upgrade
 
                 events.Add(new ShipUpgradedEvent(turnNumber, order.unitId, shipyard.id, order.playerId, oldMaxHealth, ship.maxHealth, BuildingConfig.UPGRADE_SHIP_COST));
@@ -590,6 +676,23 @@ namespace PlunkAndPlunder.Resolution
             }
 
             return events;
+        }
+
+        /// <summary>
+        /// Reset movement for all units at the start of a turn
+        /// </summary>
+        private void ResetAllUnitMovement()
+        {
+            List<Unit> allUnits = unitManager.GetAllUnits();
+            foreach (Unit unit in allUnits)
+            {
+                unit.ResetMovement();
+            }
+
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] Reset movement for {allUnits.Count} units");
+            }
         }
     }
 }

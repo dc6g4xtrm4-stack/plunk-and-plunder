@@ -28,11 +28,17 @@ namespace PlunkAndPlunder.Orders
         public List<HexCoord> path;
         public HexCoord destination => path != null && path.Count > 0 ? path[path.Count - 1] : default;
 
+        // Partial completion tracking
+        public int pathProgress; // How many steps of the path have been completed
+        public List<HexCoord> remainingPath; // Path remaining after partial movement
+
         public MoveOrder(string unitId, int playerId, List<HexCoord> path)
         {
             this.unitId = unitId;
             this.playerId = playerId;
             this.path = path;
+            this.pathProgress = 0;
+            this.remainingPath = null;
         }
 
         public OrderType GetOrderType()

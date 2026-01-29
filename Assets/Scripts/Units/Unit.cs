@@ -14,6 +14,7 @@ namespace PlunkAndPlunder.Units
         public int health;
         public int maxHealth;
         public float facingAngle; // Rotation angle in degrees (0 = facing right/east)
+        public int movementRemaining; // Movement remaining this turn
 
         public Unit(string id, int ownerId, HexCoord position, UnitType type)
         {
@@ -21,9 +22,54 @@ namespace PlunkAndPlunder.Units
             this.ownerId = ownerId;
             this.position = position;
             this.type = type;
-            this.health = 1; // MVP: 1 HP ships
-            this.maxHealth = 1;
+            this.health = 10; // Ships start with 10 HP
+            this.maxHealth = 10;
             this.facingAngle = 0f; // Default facing east
+            this.movementRemaining = GetMovementCapacity(); // Initialize with full movement
+        }
+
+        /// <summary>
+        /// Apply damage to this unit
+        /// </summary>
+        public void TakeDamage(int damage)
+        {
+            health = Mathf.Max(0, health - damage);
+        }
+
+        /// <summary>
+        /// Check if unit is dead
+        /// </summary>
+        public bool IsDead()
+        {
+            return health <= 0;
+        }
+
+        /// <summary>
+        /// Get the maximum movement capacity for this unit based on its tier
+        /// Tier is determined by maxHealth thresholds:
+        /// Tier 1 (maxHealth 1-10): 3 movement
+        /// Tier 2 (maxHealth 11-20): 4 movement
+        /// Tier 3 (maxHealth 21+): 5 movement
+        /// </summary>
+        public int GetMovementCapacity()
+        {
+            // Determine tier based on maxHealth thresholds
+            int tier = 1;
+            if (maxHealth >= 21)
+                tier = 3;
+            else if (maxHealth >= 11)
+                tier = 2;
+
+            // Base movement of 3, plus bonus based on tier
+            return 3 + (tier - 1);
+        }
+
+        /// <summary>
+        /// Reset movement to full capacity at start of turn
+        /// </summary>
+        public void ResetMovement()
+        {
+            movementRemaining = GetMovementCapacity();
         }
 
         /// <summary>
