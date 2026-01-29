@@ -46,11 +46,21 @@ namespace PlunkAndPlunder.Rendering
         /// <param name="movementCapacity">How many tiles the unit can move this turn (default 3)</param>
         public void AddPath(string unitId, List<HexCoord> path, bool isPrimary, int movementCapacity = 3)
         {
+            Debug.Log($"[PathVisualizer] AddPath called for {unitId}: path={path?.Count ?? 0} coords, isPrimary={isPrimary}, capacity={movementCapacity}");
+
             if (path == null || path.Count < 2)
             {
+                Debug.LogWarning($"[PathVisualizer] Path is null or too short ({path?.Count ?? 0} coords), clearing path for {unitId}");
                 // Remove path if it exists
                 ClearPath(unitId);
                 return;
+            }
+
+            // Validate movement capacity
+            if (movementCapacity <= 0)
+            {
+                Debug.LogError($"[PathVisualizer] Invalid movementCapacity={movementCapacity} for {unitId}, defaulting to 3");
+                movementCapacity = 3;
             }
 
             // Remove existing path for this unit if it exists
@@ -72,8 +82,20 @@ namespace PlunkAndPlunder.Rendering
             // Calculate split point: first segment is up to movementCapacity moves
             // Path includes starting position, so movementCapacity+1 points for "this turn"
             int splitIndex = Mathf.Min(movementCapacity + 1, path.Count);
+            Debug.Log($"[PathVisualizer] Splitting path at index {splitIndex} (capacity={movementCapacity}, pathCount={path.Count})");
+
+            // Validate split index bounds
+            if (splitIndex < 0 || splitIndex > path.Count)
+            {
+                Debug.LogError($"[PathVisualizer] BOUNDS ERROR: splitIndex={splitIndex} out of range [0, {path.Count}]");
+                ClearPath(unitId);
+                return;
+            }
+
             List<HexCoord> thisTurnPath = path.GetRange(0, splitIndex);
             List<HexCoord> futurePath = splitIndex < path.Count ? path.GetRange(splitIndex - 1, path.Count - splitIndex + 1) : null;
+
+            Debug.Log($"[PathVisualizer] Split result: thisTurnPath={thisTurnPath.Count} coords, futurePath={futurePath?.Count ?? 0} coords");
 
             // Create "this turn" line renderer
             pathData.lineRenderer = pathData.pathObject.AddComponent<LineRenderer>();
@@ -113,16 +135,32 @@ namespace PlunkAndPlunder.Rendering
             // Create "future turns" line renderer if path extends beyond this turn
             if (futurePath != null && futurePath.Count > 1)
             {
-                // Create dotted line segments with gaps instead of solid line
-                // We'll create multiple short LineRenderers with gaps between them
-                CreateDottedPath(futurePath, pathData, isPrimary);
-
-                // Add fewer arrows for future path, and they're smaller/dimmer
-                if (isPrimary)
+                Debug.Log($"[PathVisualizer] Creating dotted path for future segment: {futurePath.Count} coords");
+                try
                 {
-                    Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
-                    AddFutureDirectionArrows(futurePath, pathData, futureColor);
+                    // Create dotted line segments with gaps instead of solid line
+                    // We'll create multiple short LineRenderers with gaps between them
+                    CreateDottedPath(futurePath, pathData, isPrimary);
+
+                    // Add fewer arrows for future path, and they're smaller/dimmer
+                    if (isPrimary)
+                    {
+                        Color futureColor = isPrimary ? futurePathColor : new Color(futurePathColor.r, futurePathColor.g, futurePathColor.b, futurePathColor.a * 0.5f);
+                        AddFutureDirectionArrows(futurePath, pathData, futureColor);
+                    }
                 }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[PathVisualizer] EXCEPTION in CreateDottedPath for {unitId}:");
+                    Debug.LogError($"  Future path count: {futurePath.Count}");
+                    Debug.LogError($"  Exception: {ex.Message}");
+                    Debug.LogError($"  Stack trace: {ex.StackTrace}");
+                    // Continue without future path visualization
+                }
+            }
+            else
+            {
+                Debug.Log($"[PathVisualizer] No future path segment (futurePath={(futurePath != null ? futurePath.Count.ToString() : "null")} coords)");
             }
 
             paths[unitId] = pathData;
@@ -230,6 +268,15 @@ namespace PlunkAndPlunder.Rendering
         /// </summary>
         private void CreateDottedPath(List<HexCoord> path, PathData pathData, bool isPrimary)
         {
+            Debug.Log($"[PathVisualizer] CreateDottedPath called with {path.Count} coords, isPrimary={isPrimary}");
+
+            // Validate path has at least 2 elements
+            if (path == null || path.Count < 2)
+            {
+                Debug.LogError($"[PathVisualizer] CreateDottedPath: Invalid path (count={path?.Count ?? 0})");
+                return;
+            }
+
             // Create a container for dotted line segments
             GameObject dottedContainer = new GameObject("DottedPath");
             dottedContainer.transform.SetParent(pathData.pathObject.transform);
@@ -246,6 +293,8 @@ namespace PlunkAndPlunder.Rendering
                 segmentLengths.Add(length);
                 totalPathLength += length;
             }
+
+            Debug.Log($"[PathVisualizer] Calculated {segmentLengths.Count} segment lengths, total path length={totalPathLength}");
 
             // Dotted pattern: dash length and gap length
             float dashLength = 0.3f;
@@ -265,9 +314,29 @@ namespace PlunkAndPlunder.Rendering
             float currentDistance = 0f;
             int pathSegmentIndex = 0;
             float distanceIntoCurrentSegment = 0f;
+            int iterations = 0;
+            int maxIterations = 1000; // Safety limit
+
+            Debug.Log($"[PathVisualizer] Starting dotted path generation loop");
 
             while (pathSegmentIndex < path.Count - 1)
             {
+                // Safety check for infinite loop
+                iterations++;
+                if (iterations > maxIterations)
+                {
+                    Debug.LogError($"[PathVisualizer] SAFETY BREAK: Exceeded {maxIterations} iterations in CreateDottedPath loop!");
+                    Debug.LogError($"  pathSegmentIndex={pathSegmentIndex}, currentDistance={currentDistance}, totalPathLength={totalPathLength}");
+                    break;
+                }
+
+                // Bounds check for segmentLengths array access
+                if (pathSegmentIndex < 0 || pathSegmentIndex >= segmentLengths.Count)
+                {
+                    Debug.LogError($"[PathVisualizer] BOUNDS ERROR: pathSegmentIndex={pathSegmentIndex} out of range [0, {segmentLengths.Count})");
+                    break;
+                }
+
                 // Get current path segment
                 Vector3 segmentStart = path[pathSegmentIndex].ToWorldPosition(hexSize);
                 Vector3 segmentEnd = path[pathSegmentIndex + 1].ToWorldPosition(hexSize);
@@ -334,8 +403,13 @@ namespace PlunkAndPlunder.Rendering
 
                 // Safety check to prevent infinite loop
                 if (currentDistance > totalPathLength + patternLength)
+                {
+                    Debug.LogWarning($"[PathVisualizer] Safety exit: currentDistance={currentDistance} exceeds totalPathLength={totalPathLength} + pattern");
                     break;
+                }
             }
+
+            Debug.Log($"[PathVisualizer] Completed dotted path generation: {iterations} iterations");
 
             // Store reference to dotted container as futureLineRenderer (for cleanup)
             // We'll use a dummy LineRenderer just to hold the reference for cleanup

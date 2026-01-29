@@ -686,11 +686,24 @@ namespace PlunkAndPlunder.UI
                 // Determine if this is the primary path (currently selected unit)
                 bool isPrimary = (selectedUnit != null && selectedUnit.id == unitId);
 
-                // Add or update the path with movement capacity
-                pathVisualizer.AddPath(unitId, path, isPrimary, movementCapacity);
-                pathsAdded++;
+                try
+                {
+                    // Add or update the path with movement capacity
+                    pathVisualizer.AddPath(unitId, path, isPrimary, movementCapacity);
+                    pathsAdded++;
 
-                Debug.Log($"[GameHUD] Added path for {unitId}: {path.Count} waypoints, {(isPrimary ? "PRIMARY" : "secondary")}, capacity={movementCapacity}");
+                    Debug.Log($"[GameHUD] Added path for {unitId}: {path.Count} waypoints, {(isPrimary ? "PRIMARY" : "secondary")}, capacity={movementCapacity}");
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[GameHUD] EXCEPTION in pathVisualizer.AddPath() for unit {unitId}:");
+                    Debug.LogError($"  Path count: {path?.Count ?? 0}");
+                    Debug.LogError($"  Movement capacity: {movementCapacity}");
+                    Debug.LogError($"  IsPrimary: {isPrimary}");
+                    Debug.LogError($"  Exception type: {ex.GetType().Name}");
+                    Debug.LogError($"  Exception message: {ex.Message}");
+                    Debug.LogError($"  Stack trace: {ex.StackTrace}");
+                }
             }
 
             Debug.Log($"[GameHUD] Updated path visualizations: {pathsAdded}/{pendingMovePaths.Count} paths added, primary={selectedUnit?.id ?? "none"}");
