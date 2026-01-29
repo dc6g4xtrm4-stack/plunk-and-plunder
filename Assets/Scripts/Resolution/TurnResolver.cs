@@ -101,15 +101,15 @@ namespace PlunkAndPlunder.Resolution
         {
             List<GameEvent> events = new List<GameEvent>();
 
-            // Build a map of intended destinations
+            // Build a map of intended destinations and store paths
             Dictionary<string, HexCoord> intendedMoves = new Dictionary<string, HexCoord>();
+            Dictionary<string, List<HexCoord>> movePaths = new Dictionary<string, List<HexCoord>>();
             foreach (MoveOrder order in moveOrders)
             {
                 if (order.path != null && order.path.Count > 1)
                 {
-                    // For MVP, move to final destination in one step
-                    // Future: implement tick-by-tick movement for more complex resolution
                     intendedMoves[order.unitId] = order.destination;
+                    movePaths[order.unitId] = order.path;
                 }
             }
 
@@ -161,12 +161,16 @@ namespace PlunkAndPlunder.Resolution
                     if (unit != null)
                     {
                         HexCoord from = unit.position;
-                        unitManager.MoveUnit(unitId, destination);
-                        events.Add(new UnitMovedEvent(turnNumber, unitId, from, destination));
+                        List<HexCoord> path = movePaths.ContainsKey(unitId) ? movePaths[unitId] : null;
+
+                        // NOTE: We don't actually move the unit here anymore - TurnAnimator will do it
+                        // unitManager.MoveUnit(unitId, destination);
+
+                        events.Add(new UnitMovedEvent(turnNumber, unitId, from, destination, path));
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] Unit {unitId} moved from {from} to {destination}");
+                            Debug.Log($"[TurnResolver] Unit {unitId} scheduled to move from {from} to {destination}");
                         }
                     }
                 }
@@ -211,14 +215,15 @@ namespace PlunkAndPlunder.Resolution
                 }
             }
 
-            // Destroy units (sort IDs for determinism)
+            // Create destruction events (sort IDs for determinism)
+            // NOTE: We don't actually destroy units here - TurnAnimator will do it
             foreach (string unitId in unitsToDestroy.OrderBy(id => id))
             {
                 Unit unit = unitManager.GetUnit(unitId);
                 if (unit != null)
                 {
                     events.Add(new UnitDestroyedEvent(turnNumber, unitId, unit.ownerId, unit.position));
-                    unitManager.RemoveUnit(unitId);
+                    // unitManager.RemoveUnit(unitId); // Deferred to TurnAnimator
                 }
             }
 
@@ -313,9 +318,6 @@ namespace PlunkAndPlunder.Resolution
                 // Deduct currency
                 player.gold -= BuildingConfig.DEPLOY_SHIPYARD_COST;
 
-                // Remove the ship
-                unitManager.RemoveUnit(order.unitId);
-
                 // Create shipyard - if there's a harbor structure, convert it, otherwise create new
                 Structure shipyard;
                 if (existingStructure != null && existingStructure.type == StructureType.HARBOR)
@@ -330,6 +332,9 @@ namespace PlunkAndPlunder.Resolution
                     // Create new shipyard
                     shipyard = structureManager.CreateStructure(order.playerId, order.position, StructureType.SHIPYARD);
                 }
+
+                // NOTE: We don't remove the ship here - TurnAnimator will do it
+                // unitManager.RemoveUnit(order.unitId); // Deferred to TurnAnimator
 
                 events.Add(new ShipyardDeployedEvent(turnNumber, order.unitId, shipyard.id, order.playerId, order.position));
 

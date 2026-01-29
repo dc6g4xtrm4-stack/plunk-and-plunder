@@ -12,12 +12,20 @@ namespace PlunkAndPlunder.Rendering
         [Header("Path Settings")]
         public float hexSize = 1f;
         public float pathHeight = 0.2f;
-        public Color pathColor = new Color(1f, 1f, 0f, 0.8f); // Yellow
+        public Color primaryPathColor = new Color(1f, 1f, 0f, 0.8f); // Solid yellow
+        public Color secondaryPathColor = new Color(1f, 1f, 0f, 0.5f); // Semi-transparent yellow
         public float lineWidth = 0.15f;
 
         private GameObject pathContainer;
-        private GameObject currentPathObject;
-        private LineRenderer lineRenderer;
+        private Dictionary<string, PathData> paths = new Dictionary<string, PathData>();
+
+        private class PathData
+        {
+            public GameObject pathObject;
+            public LineRenderer lineRenderer;
+            public List<GameObject> arrows;
+            public bool isPrimary;
+        }
 
         private void Awake()
         {
@@ -26,21 +34,36 @@ namespace PlunkAndPlunder.Rendering
         }
 
         /// <summary>
-        /// Visualize a path for a unit
+        /// Add or update a path for a specific unit
         /// </summary>
-        public void ShowPath(List<HexCoord> path)
+        /// <param name="unitId">Unique identifier for the unit</param>
+        /// <param name="path">The path to visualize</param>
+        /// <param name="isPrimary">Whether this is the primary (selected) unit's path</param>
+        public void AddPath(string unitId, List<HexCoord> path, bool isPrimary)
         {
-            ClearPath();
-
             if (path == null || path.Count < 2)
+            {
+                // Remove path if it exists
+                ClearPath(unitId);
                 return;
+            }
+
+            // Remove existing path for this unit if it exists
+            ClearPath(unitId);
+
+            // Create new path data
+            PathData pathData = new PathData
+            {
+                isPrimary = isPrimary,
+                arrows = new List<GameObject>()
+            };
 
             // Create path object
-            currentPathObject = new GameObject("Path");
-            currentPathObject.transform.SetParent(pathContainer.transform);
+            pathData.pathObject = new GameObject($"Path_{unitId}");
+            pathData.pathObject.transform.SetParent(pathContainer.transform);
 
             // Create line renderer
-            lineRenderer = currentPathObject.AddComponent<LineRenderer>();
+            pathData.lineRenderer = pathData.pathObject.AddComponent<LineRenderer>();
 
             // Find a suitable shader
             Shader shader = Shader.Find("Sprites/Default");
@@ -50,33 +73,104 @@ namespace PlunkAndPlunder.Rendering
                 shader = Shader.Find("Standard");
 
             Material lineMaterial = new Material(shader);
+            Color pathColor = isPrimary ? primaryPathColor : secondaryPathColor;
             lineMaterial.color = pathColor;
-            lineRenderer.material = lineMaterial;
+            pathData.lineRenderer.material = lineMaterial;
 
             // Configure line renderer
-            lineRenderer.startWidth = lineWidth;
-            lineRenderer.endWidth = lineWidth;
-            lineRenderer.positionCount = path.Count;
-            lineRenderer.useWorldSpace = true;
+            pathData.lineRenderer.startWidth = lineWidth;
+            pathData.lineRenderer.endWidth = lineWidth;
+            pathData.lineRenderer.positionCount = path.Count;
+            pathData.lineRenderer.useWorldSpace = true;
 
             // Set line positions from path
             for (int i = 0; i < path.Count; i++)
             {
                 Vector3 worldPos = path[i].ToWorldPosition(hexSize);
                 worldPos.y = pathHeight;
-                lineRenderer.SetPosition(i, worldPos);
+                pathData.lineRenderer.SetPosition(i, worldPos);
             }
 
-            // Add direction arrows along the path
-            AddDirectionArrows(path);
+            // Add direction arrows along the path (full arrows for primary, fewer/none for secondary)
+            if (isPrimary)
+            {
+                AddDirectionArrows(path, pathData, pathColor);
+            }
 
-            Debug.Log($"[PathVisualizer] Showing path with {path.Count} waypoints");
+            paths[unitId] = pathData;
+
+            Debug.Log($"[PathVisualizer] Added {(isPrimary ? "primary" : "secondary")} path for {unitId} with {path.Count} waypoints");
+        }
+
+        /// <summary>
+        /// Visualize a path for a unit (legacy method for backward compatibility)
+        /// </summary>
+        public void ShowPath(List<HexCoord> path)
+        {
+            AddPath("default", path, true);
+        }
+
+        /// <summary>
+        /// Update whether a path is primary or secondary
+        /// </summary>
+        public void SetPathPrimary(string unitId, bool isPrimary)
+        {
+            if (!paths.ContainsKey(unitId))
+                return;
+
+            PathData pathData = paths[unitId];
+            if (pathData.isPrimary == isPrimary)
+                return; // No change needed
+
+            pathData.isPrimary = isPrimary;
+
+            // Update color
+            Color pathColor = isPrimary ? primaryPathColor : secondaryPathColor;
+            if (pathData.lineRenderer != null && pathData.lineRenderer.material != null)
+            {
+                pathData.lineRenderer.material.color = pathColor;
+            }
+
+            // Update arrows - remove old ones and add new ones if needed
+            foreach (var arrow in pathData.arrows)
+            {
+                if (arrow != null)
+                    Destroy(arrow);
+            }
+            pathData.arrows.Clear();
+
+            // Add arrows only for primary paths
+            if (isPrimary && pathData.lineRenderer != null && pathData.lineRenderer.positionCount > 1)
+            {
+                List<HexCoord> path = new List<HexCoord>();
+                for (int i = 0; i < pathData.lineRenderer.positionCount; i++)
+                {
+                    Vector3 pos = pathData.lineRenderer.GetPosition(i);
+                    path.Add(HexCoord.FromWorldPosition(pos, hexSize));
+                }
+                AddDirectionArrows(path, pathData, pathColor);
+            }
+            else
+            {
+                // Update arrow colors for existing arrows
+                foreach (var arrow in pathData.arrows)
+                {
+                    if (arrow != null)
+                    {
+                        MeshRenderer renderer = arrow.GetComponent<MeshRenderer>();
+                        if (renderer != null && renderer.material != null)
+                        {
+                            renderer.material.color = pathColor;
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
         /// Add small arrow indicators to show movement direction
         /// </summary>
-        private void AddDirectionArrows(List<HexCoord> path)
+        private void AddDirectionArrows(List<HexCoord> path, PathData pathData, Color color)
         {
             // Add arrows every other waypoint (skip first and last)
             for (int i = 1; i < path.Count - 1; i += 2)
@@ -88,7 +182,8 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 direction = (nextPos - currentPos).normalized;
 
                 // Create small arrow
-                CreateArrow(currentPos, direction);
+                GameObject arrow = CreateArrow(currentPos, direction, pathData, color);
+                pathData.arrows.Add(arrow);
             }
 
             // Always add arrow at the end
@@ -97,18 +192,19 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 lastPos = path[path.Count - 1].ToWorldPosition(hexSize);
                 Vector3 prevPos = path[path.Count - 2].ToWorldPosition(hexSize);
                 Vector3 direction = (lastPos - prevPos).normalized;
-                CreateArrow(lastPos, direction);
+                GameObject arrow = CreateArrow(lastPos, direction, pathData, color);
+                pathData.arrows.Add(arrow);
             }
         }
 
         /// <summary>
         /// Create a simple arrow indicator
         /// </summary>
-        private void CreateArrow(Vector3 position, Vector3 direction)
+        private GameObject CreateArrow(Vector3 position, Vector3 direction, PathData pathData, Color color)
         {
             GameObject arrow = GameObject.CreatePrimitive(PrimitiveType.Cube);
             arrow.name = "PathArrow";
-            arrow.transform.SetParent(currentPathObject.transform);
+            arrow.transform.SetParent(pathData.pathObject.transform);
 
             position.y = pathHeight + 0.05f; // Slightly above the line
             arrow.transform.position = position;
@@ -127,7 +223,7 @@ namespace PlunkAndPlunder.Rendering
             {
                 Shader shader = Shader.Find("Standard") ?? Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Unlit/Color");
                 Material mat = new Material(shader);
-                mat.color = pathColor;
+                mat.color = color;
                 renderer.material = mat;
             }
 
@@ -137,24 +233,54 @@ namespace PlunkAndPlunder.Rendering
             {
                 Destroy(collider);
             }
+
+            return arrow;
         }
 
         /// <summary>
-        /// Clear the current path visualization
+        /// Clear the path visualization for a specific unit
+        /// </summary>
+        public void ClearPath(string unitId)
+        {
+            if (paths.ContainsKey(unitId))
+            {
+                PathData pathData = paths[unitId];
+                if (pathData.pathObject != null)
+                {
+                    Destroy(pathData.pathObject);
+                }
+                paths.Remove(unitId);
+                Debug.Log($"[PathVisualizer] Cleared path for {unitId}");
+            }
+        }
+
+        /// <summary>
+        /// Clear the current path visualization (legacy method for backward compatibility)
         /// </summary>
         public void ClearPath()
         {
-            if (currentPathObject != null)
+            ClearPath("default");
+        }
+
+        /// <summary>
+        /// Clear all path visualizations
+        /// </summary>
+        public void ClearAllPaths()
+        {
+            foreach (var kvp in paths)
             {
-                Destroy(currentPathObject);
-                currentPathObject = null;
-                lineRenderer = null;
+                if (kvp.Value.pathObject != null)
+                {
+                    Destroy(kvp.Value.pathObject);
+                }
             }
+            paths.Clear();
+            Debug.Log("[PathVisualizer] Cleared all paths");
         }
 
         private void OnDestroy()
         {
-            ClearPath();
+            ClearAllPaths();
         }
     }
 }

@@ -26,6 +26,7 @@ namespace PlunkAndPlunder.Core
 
         // Systems
         private TurnResolver turnResolver;
+        private TurnAnimator turnAnimator;
         private Pathfinding pathfinding;
         private OrderValidator orderValidator;
         private AIController aiController;
@@ -90,6 +91,16 @@ namespace PlunkAndPlunder.Core
             orderValidator = new OrderValidator(state.grid, state.unitManager, state.structureManager, state.playerManager);
             turnResolver = new TurnResolver(state.grid, state.unitManager, state.playerManager, state.structureManager, enableDeterministicLogging);
             aiController = new AIController(state.grid, state.unitManager, state.playerManager, pathfinding);
+
+            // Initialize turn animator (add component if not present)
+            turnAnimator = GetComponent<TurnAnimator>();
+            if (turnAnimator == null)
+            {
+                turnAnimator = gameObject.AddComponent<TurnAnimator>();
+            }
+            turnAnimator.Initialize(state.unitManager);
+            turnAnimator.OnAnimationStep += HandleAnimationStep;
+            turnAnimator.OnAnimationComplete += HandleAnimationComplete;
 
             // Place starting units for each player
             PlaceStartingUnits();
@@ -193,6 +204,10 @@ namespace PlunkAndPlunder.Core
 
                 case GamePhase.Resolving:
                     ResolveCurrentTurn();
+                    break;
+
+                case GamePhase.Animating:
+                    // Animation will be started by ResolveCurrentTurn
                     break;
             }
         }
@@ -299,6 +314,23 @@ namespace PlunkAndPlunder.Core
             Debug.Log($"[GameManager] Turn resolved with {events.Count} events");
 
             OnTurnResolved?.Invoke(events);
+
+            // Transition to Animating phase and start animation
+            ChangePhase(GamePhase.Animating);
+            turnAnimator.AnimateEvents(events, state);
+        }
+
+        private void HandleAnimationStep(GameState updatedState)
+        {
+            // Trigger visual update after each animation step
+            OnGameStateUpdated?.Invoke(updatedState);
+        }
+
+        private void HandleAnimationComplete()
+        {
+            Debug.Log("[GameManager] Animation complete, transitioning to next phase");
+
+            // Final state update
             OnGameStateUpdated?.Invoke(state);
 
             // Check for game over

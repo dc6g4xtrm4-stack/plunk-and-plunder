@@ -39,13 +39,15 @@ namespace PlunkAndPlunder.Core
         public string unitId;
         public HexCoord from;
         public HexCoord to;
+        public List<HexCoord> path; // Full path for animation
 
-        public UnitMovedEvent(int turnNumber, string unitId, HexCoord from, HexCoord to)
+        public UnitMovedEvent(int turnNumber, string unitId, HexCoord from, HexCoord to, List<HexCoord> path = null)
             : base(turnNumber, GameEventType.UnitMoved, $"Unit {unitId} moved from {from} to {to}")
         {
             this.unitId = unitId;
             this.from = from;
             this.to = to;
+            this.path = path;
         }
     }
 

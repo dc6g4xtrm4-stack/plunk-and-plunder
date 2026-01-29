@@ -29,9 +29,12 @@ namespace PlunkAndPlunder.UI
         private Structure selectedStructure;
         private List<HexCoord> plannedPath;
         private List<IOrder> pendingPlayerOrders = new List<IOrder>();
+        private HashSet<string> unitsWithOrders = new HashSet<string>(); // Track which units have pending orders
+        private Dictionary<string, List<HexCoord>> pendingMovePaths = new Dictionary<string, List<HexCoord>>(); // Track paths per unit
 
         // Visualization components
         private PathVisualizer pathVisualizer;
+        private ButtonPulse buttonPulse;
 
         public void Initialize()
         {
@@ -69,6 +72,12 @@ namespace PlunkAndPlunder.UI
             // Submit button
             submitButton = CreateButton("Submit Orders", new Vector2(700, 500), OnSubmitClicked);
             submitButton.transform.SetParent(transform, false);
+
+            // Add button pulse component
+            buttonPulse = submitButton.gameObject.AddComponent<ButtonPulse>();
+            buttonPulse.normalColor = new Color(0.2f, 0.4f, 0.2f);
+            buttonPulse.minPulseColor = new Color(0f, 0.6f, 0f);
+            buttonPulse.maxPulseColor = new Color(0f, 1f, 0f);
 
             // Auto-resolve button (debug)
             autoResolveButton = CreateButton("Auto-Resolve (Debug)", new Vector2(500, 500), OnAutoResolveClicked);
@@ -213,6 +222,13 @@ namespace PlunkAndPlunder.UI
                 // Update submit button
                 submitButton.interactable = (state.phase == GamePhase.Planning && pendingPlayerOrders.Count > 0);
 
+                // Enable button pulsing when player has queued orders
+                if (buttonPulse != null)
+                {
+                    bool shouldPulse = (state.phase == GamePhase.Planning && pendingPlayerOrders.Count > 0 && AllHumanUnitsHaveOrders(state));
+                    buttonPulse.SetPulsing(shouldPulse);
+                }
+
                 // Update action buttons based on selection
                 UpdateActionButtons();
             }
@@ -305,13 +321,23 @@ namespace PlunkAndPlunder.UI
             Tile tile = state.grid.GetTile(unit.position);
             string tileInfo = tile != null ? $"Tile: {tile.type}" : "Tile: Unknown";
 
-            selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{tileInfo}";
+            string orderStatus = unitsWithOrders.Contains(unit.id) ? "\n[HAS ORDER]" : "";
+            selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{tileInfo}{orderStatus}";
 
             // Show selection indicator
             var unitRenderer = FindObjectOfType<UnitRenderer>();
             if (unitRenderer != null)
             {
                 unitRenderer.ShowSelectionIndicator(unit.id);
+
+                // Update indicator state based on whether unit has an order
+                UpdateSelectionIndicatorState(unit.id);
+            }
+
+            // Update path visualization - set this unit's path as primary if it exists
+            if (pathVisualizer != null)
+            {
+                UpdatePathVisualizations();
             }
         }
 
@@ -331,10 +357,10 @@ namespace PlunkAndPlunder.UI
                 unitRenderer.HideSelectionIndicator();
             }
 
-            // Clear path visualization
+            // Update path visualization - show all paths with no primary
             if (pathVisualizer != null)
             {
-                pathVisualizer.ClearPath();
+                UpdatePathVisualizations();
             }
         }
 
@@ -352,10 +378,10 @@ namespace PlunkAndPlunder.UI
                 unitRenderer.HideSelectionIndicator();
             }
 
-            // Clear path visualization
+            // Update path visualization - show all paths with no primary
             if (pathVisualizer != null)
             {
-                pathVisualizer.ClearPath();
+                UpdatePathVisualizations();
             }
         }
 
@@ -375,17 +401,29 @@ namespace PlunkAndPlunder.UI
             {
                 plannedPath = path;
 
+                // Remove existing move order for this unit if any
+                pendingPlayerOrders.RemoveAll(o => o is MoveOrder moveOrder && moveOrder.unitId == selectedUnit.id);
+
                 // Add move order to pending orders
                 MoveOrder order = new MoveOrder(selectedUnit.id, 0, path);
                 pendingPlayerOrders.Add(order);
 
+                // Track that this unit has an order
+                unitsWithOrders.Add(selectedUnit.id);
+
+                // Store the path for this unit
+                pendingMovePaths[selectedUnit.id] = path;
+
                 Debug.Log($"[GameHUD] Planned path for {selectedUnit.id}: {path.Count} steps");
                 selectedUnitText.text += "\n\nMove order queued!";
 
-                // Visualize the path
+                // Update selection indicator to OrderSet state
+                UpdateSelectionIndicatorState(selectedUnit.id);
+
+                // Update path visualization - add/update this unit's path
                 if (pathVisualizer != null)
                 {
-                    pathVisualizer.ShowPath(path);
+                    UpdatePathVisualizations();
                 }
             }
         }
@@ -400,13 +438,15 @@ namespace PlunkAndPlunder.UI
 
             // Clear state
             pendingPlayerOrders.Clear();
+            unitsWithOrders.Clear();
+            pendingMovePaths.Clear();
             ClearSelection();
             selectedUnitText.text = "Orders submitted!";
 
-            // Clear path visualization
+            // Clear all path visualizations
             if (pathVisualizer != null)
             {
-                pathVisualizer.ClearPath();
+                pathVisualizer.ClearAllPaths();
             }
         }
 
@@ -437,6 +477,9 @@ namespace PlunkAndPlunder.UI
             // Create deploy shipyard order
             DeployShipyardOrder order = new DeployShipyardOrder(selectedUnit.id, 0, selectedUnit.position);
             pendingPlayerOrders.Add(order);
+
+            // Track that this unit has an order
+            unitsWithOrders.Add(selectedUnit.id);
 
             Debug.Log($"[GameHUD] Deploy shipyard order queued for {selectedUnit.id}");
             selectedUnitText.text += "\n\nDeploy Shipyard order queued!";
@@ -480,12 +523,14 @@ namespace PlunkAndPlunder.UI
             if (phase == GamePhase.Planning)
             {
                 pendingPlayerOrders.Clear();
+                unitsWithOrders.Clear();
+                pendingMovePaths.Clear();
                 ClearSelection();
 
-                // Clear path visualization
+                // Clear all path visualizations
                 if (pathVisualizer != null)
                 {
-                    pathVisualizer.ClearPath();
+                    pathVisualizer.ClearAllPaths();
                 }
             }
         }
@@ -493,6 +538,83 @@ namespace PlunkAndPlunder.UI
         private void HandleTurnResolved(List<GameEvent> events)
         {
             eventLog?.AddEvents(events);
+        }
+
+        /// <summary>
+        /// Update all path visualizations based on current selection and pending orders
+        /// </summary>
+        private void UpdatePathVisualizations()
+        {
+            if (pathVisualizer == null)
+                return;
+
+            // Clear all paths first (we'll re-add them)
+            // Note: We don't use ClearAllPaths() because we're about to re-add them
+
+            // Add all pending move paths
+            foreach (var kvp in pendingMovePaths)
+            {
+                string unitId = kvp.Key;
+                List<HexCoord> path = kvp.Value;
+
+                // Determine if this is the primary path (currently selected unit)
+                bool isPrimary = (selectedUnit != null && selectedUnit.id == unitId);
+
+                // Add or update the path
+                pathVisualizer.AddPath(unitId, path, isPrimary);
+            }
+
+            Debug.Log($"[GameHUD] Updated path visualizations: {pendingMovePaths.Count} paths, primary={selectedUnit?.id ?? "none"}");
+        }
+
+        /// <summary>
+        /// Check if all human units have orders queued
+        /// </summary>
+        private bool AllHumanUnitsHaveOrders(GameState state)
+        {
+            if (state == null || state.unitManager == null)
+                return false;
+
+            var humanUnits = state.unitManager.GetAllUnits().FindAll(u => u.ownerId == 0);
+            if (humanUnits.Count == 0)
+                return false;
+
+            foreach (var unit in humanUnits)
+            {
+                if (!unitsWithOrders.Contains(unit.id))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Update the selection indicator state based on whether the unit has an order
+        /// </summary>
+        private void UpdateSelectionIndicatorState(string unitId)
+        {
+            var unitRenderer = FindObjectOfType<UnitRenderer>();
+            if (unitRenderer == null)
+                return;
+
+            // Find the selection indicator for this unit using reflection
+            var selectionIndicators = unitRenderer.GetType()
+                .GetField("selectionIndicators", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.GetValue(unitRenderer) as Dictionary<string, GameObject>;
+
+            if (selectionIndicators != null && selectionIndicators.TryGetValue(unitId, out GameObject indicator))
+            {
+                SelectionPulse pulse = indicator.GetComponent<SelectionPulse>();
+                if (pulse != null)
+                {
+                    // Set state based on whether unit has an order
+                    SelectionState newState = unitsWithOrders.Contains(unitId)
+                        ? SelectionState.OrderSet
+                        : SelectionState.WaitingForOrder;
+                    pulse.SetState(newState);
+                    Debug.Log($"[GameHUD] Updated selection indicator for {unitId} to state: {newState}");
+                }
+            }
         }
 
         private void OnDestroy()

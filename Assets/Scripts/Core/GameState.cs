@@ -49,6 +49,7 @@ namespace PlunkAndPlunder.Core
         Planning,      // Players planning their moves
         Submitted,     // Waiting for all players to submit
         Resolving,     // Turn is being resolved
+        Animating,     // Animating turn resolution events
         GameOver
     }
 }
