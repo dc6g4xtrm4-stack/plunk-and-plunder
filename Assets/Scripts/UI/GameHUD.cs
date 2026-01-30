@@ -29,10 +29,8 @@ namespace PlunkAndPlunder.UI
         private BuildQueueUI buildQueueUI;
 
         // Interaction state
-        private Unit selectedUnit; // The "active" unit in the selection group
+        private Unit selectedUnit;
         private Structure selectedStructure;
-        private List<Unit> selectedUnits = new List<Unit>(); // All selected units (Starcraft-style)
-        private int activeUnitIndex = 0; // Index of the active unit within selectedUnits
         private List<HexCoord> plannedPath;
         private List<IOrder> pendingPlayerOrders = new List<IOrder>();
         private HashSet<string> unitsWithOrders = new HashSet<string>(); // Track which units have pending orders
@@ -41,14 +39,6 @@ namespace PlunkAndPlunder.UI
         // Visualization components
         private PathVisualizer pathVisualizer;
         private ButtonPulse buttonPulse;
-        private SelectionBox selectionBox;
-
-        // Drag selection state
-        private bool isDraggingSelection = false;
-        private Vector2 dragStartPosition;
-
-        // Constants
-        private const float unitHeight = 0.5f; // Height where units are rendered
 
         public void Initialize()
         {
@@ -63,16 +53,6 @@ namespace PlunkAndPlunder.UI
             GameObject pathVisualizerObj = new GameObject("PathVisualizer");
             pathVisualizerObj.transform.SetParent(transform, false);
             pathVisualizer = pathVisualizerObj.AddComponent<PathVisualizer>();
-
-            // Create selection box
-            GameObject selectionBoxObj = new GameObject("SelectionBox");
-            selectionBoxObj.transform.SetParent(transform, false);
-            RectTransform selectionBoxRect = selectionBoxObj.AddComponent<RectTransform>();
-            selectionBoxRect.anchorMin = Vector2.zero;
-            selectionBoxRect.anchorMax = Vector2.zero;
-            selectionBoxRect.pivot = Vector2.zero;
-            selectionBox = selectionBoxObj.AddComponent<SelectionBox>();
-            selectionBox.Initialize();
         }
 
         private void CreateLayout()
@@ -93,8 +73,8 @@ namespace PlunkAndPlunder.UI
             playerInfoText.GetComponent<RectTransform>().anchoredPosition = new Vector2(600, 0);
             playerInfoText.alignment = TextAnchor.MiddleRight;
 
-            // Submit button
-            submitButton = CreateButton("Submit Orders", new Vector2(750, 500), OnSubmitClicked);
+            // Submit button - positioned below top bar
+            submitButton = CreateButton("Submit Orders", new Vector2(750, 420), OnSubmitClicked);
             submitButton.transform.SetParent(transform, false);
 
             // Add button pulse component
@@ -103,8 +83,8 @@ namespace PlunkAndPlunder.UI
             buttonPulse.minPulseColor = new Color(0f, 0.6f, 0f);
             buttonPulse.maxPulseColor = new Color(0f, 1f, 0f);
 
-            // Auto-resolve button (debug) - moved further left to prevent overlap
-            autoResolveButton = CreateButton("Auto-Resolve (Debug)", new Vector2(520, 500), OnAutoResolveClicked);
+            // Auto-resolve button (debug) - positioned below top bar
+            autoResolveButton = CreateButton("Auto-Resolve (Debug)", new Vector2(520, 420), OnAutoResolveClicked);
             autoResolveButton.transform.SetParent(transform, false);
 
             // Selected unit panel
@@ -161,7 +141,7 @@ namespace PlunkAndPlunder.UI
             GameObject helpPanel = CreatePanel(new Vector2(650, -450), new Vector2(400, 150), new Color(0.1f, 0.1f, 0.1f, 0.7f));
             helpPanel.transform.SetParent(transform, false);
 
-            helpText = CreateText("HOW TO PLAY:\nLeft-click: Select ship/building\nDrag: Box select ships\nRight-click: Move selected ships\nTAB: Cycle through selection\nQueue orders, then Submit", 16, helpPanel.transform);
+            helpText = CreateText("HOW TO PLAY:\nLeft-click: Select ship/building\nRight-click: Move ship\nQueue orders, then Submit\nOr: Auto-Resolve for AI turns", 16, helpPanel.transform);
             helpText.alignment = TextAnchor.UpperLeft;
             helpText.GetComponent<RectTransform>().anchoredPosition = new Vector2(-190, -10);
             helpText.GetComponent<RectTransform>().sizeDelta = new Vector2(380, 130);
@@ -245,7 +225,6 @@ namespace PlunkAndPlunder.UI
         {
             UpdateHUD();
             HandleInput();
-            HandleTabCycling();
         }
 
         private void UpdateHUD()
@@ -339,247 +318,69 @@ namespace PlunkAndPlunder.UI
             if (GameManager.Instance?.state?.phase != GamePhase.Planning)
                 return;
 
-            // Left mouse button down: Start selection or click select
+            // Left click: select unit or structure
             if (Input.GetMouseButtonDown(0))
             {
-                isDraggingSelection = true;
-                dragStartPosition = Input.mousePosition;
-            }
-
-            // Left mouse button held: Update drag selection box
-            if (Input.GetMouseButton(0) && isDraggingSelection)
-            {
-                float dragDistance = Vector2.Distance(dragStartPosition, Input.mousePosition);
-
-                // Only show selection box if dragged more than a threshold
-                if (dragDistance > 5f)
+                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                if (Physics.Raycast(ray, out RaycastHit hit))
                 {
-                    if (!selectionBox.IsActive())
+                    HexCoord clickedCoord = HexCoord.FromWorldPosition(hit.point, 1f);
+
+                    // Check for units first
+                    List<Unit> unitsAtPos = GameManager.Instance.state.unitManager.GetUnitsAtPosition(clickedCoord);
+                    if (unitsAtPos.Count > 0)
                     {
-                        selectionBox.StartSelection(dragStartPosition);
+                        SelectUnit(unitsAtPos[0]);
                     }
-                    selectionBox.UpdateSelection(Input.mousePosition);
+                    else
+                    {
+                        // Check for structures
+                        Structure structure = GameManager.Instance.state.structureManager.GetStructureAtPosition(clickedCoord);
+                        if (structure != null)
+                        {
+                            SelectStructure(structure);
+                        }
+                        else
+                        {
+                            // Clear selection
+                            ClearSelection();
+                        }
+                    }
                 }
             }
 
-            // Left mouse button up: Complete selection
-            if (Input.GetMouseButtonUp(0))
-            {
-                if (selectionBox.IsActive())
-                {
-                    // Drag selection
-                    Rect selectionRect = selectionBox.EndSelection();
-                    PerformBoxSelection(selectionRect);
-                }
-                else
-                {
-                    // Single click selection
-                    PerformClickSelection();
-                }
-
-                isDraggingSelection = false;
-            }
-
-            // Right click: set destination for all selected units
-            if (Input.GetMouseButtonDown(1) && selectedUnits.Count > 0)
+            // Right click: set destination or context menu
+            if (Input.GetMouseButtonDown(1) && selectedUnit != null)
             {
                 Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
                 if (Physics.Raycast(ray, out RaycastHit hit))
                 {
                     HexCoord destination = HexCoord.FromWorldPosition(hit.point, 1f);
-                    SetSelectedUnitsDestination(destination);
+                    SetUnitDestination(destination);
                 }
             }
         }
 
-        /// <summary>
-        /// Handle single click selection
-        /// </summary>
-        private void PerformClickSelection()
+        private void SelectUnit(Unit unit)
         {
-            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out RaycastHit hit))
-            {
-                HexCoord clickedCoord = HexCoord.FromWorldPosition(hit.point, 1f);
-
-                // Check for units first
-                List<Unit> unitsAtPos = GameManager.Instance.state.unitManager.GetUnitsAtPosition(clickedCoord);
-                if (unitsAtPos.Count > 0)
-                {
-                    // Filter to only human player units
-                    List<Unit> humanUnits = unitsAtPos.FindAll(u => u.ownerId == 0);
-                    if (humanUnits.Count > 0)
-                    {
-                        // Single unit selection
-                        SelectSingleUnit(humanUnits[0]);
-                    }
-                    else
-                    {
-                        ClearSelection();
-                    }
-                }
-                else
-                {
-                    // Check for structures
-                    Structure structure = GameManager.Instance.state.structureManager.GetStructureAtPosition(clickedCoord);
-                    if (structure != null)
-                    {
-                        SelectStructure(structure);
-                    }
-                    else
-                    {
-                        // Clear selection
-                        ClearSelection();
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Perform box selection based on screen rect
-        /// </summary>
-        private void PerformBoxSelection(Rect screenRect)
-        {
-            if (GameManager.Instance?.state == null)
-                return;
-
-            List<Unit> unitsInBox = new List<Unit>();
-
-            // Check all human player units
-            List<Unit> allUnits = GameManager.Instance.state.unitManager.GetAllUnits();
-            foreach (Unit unit in allUnits)
-            {
-                // Only select human player units
-                if (unit.ownerId != 0)
-                    continue;
-
-                // Convert unit world position to screen position
-                Vector3 worldPos = unit.position.ToWorldPosition(1f);
-                worldPos.y = unitHeight;
-                Vector3 screenPos = Camera.main.WorldToScreenPoint(worldPos);
-
-                // Check if unit is within selection box
-                if (screenRect.Contains(screenPos))
-                {
-                    unitsInBox.Add(unit);
-                }
-            }
-
-            if (unitsInBox.Count > 0)
-            {
-                SelectMultipleUnits(unitsInBox);
-                Debug.Log($"[GameHUD] Box selected {unitsInBox.Count} units");
-            }
-            else
-            {
-                ClearSelection();
-            }
-        }
-
-        /// <summary>
-        /// Handle Tab key cycling through selected units
-        /// </summary>
-        private void HandleTabCycling()
-        {
-            if (GameManager.Instance?.state?.phase != GamePhase.Planning)
-                return;
-
-            if (Input.GetKeyDown(KeyCode.Tab) && selectedUnits.Count > 1)
-            {
-                // Cycle to next unit
-                activeUnitIndex = (activeUnitIndex + 1) % selectedUnits.Count;
-                selectedUnit = selectedUnits[activeUnitIndex];
-
-                // Update HUD to show new active unit
-                UpdateSelectedUnitDisplay();
-
-                // Update selection indicators
-                UpdateSelectionIndicators();
-
-                Debug.Log($"[GameHUD] Cycled to unit {selectedUnit.id} (index {activeUnitIndex}/{selectedUnits.Count})");
-            }
-        }
-
-        /// <summary>
-        /// Select a single unit
-        /// </summary>
-        private void SelectSingleUnit(Unit unit)
-        {
-            selectedUnits.Clear();
-            selectedUnits.Add(unit);
             selectedUnit = unit;
-            activeUnitIndex = 0;
             selectedStructure = null;
-
-            UpdateSelectedUnitDisplay();
-            UpdateSelectionIndicators();
-
-            // Update path visualization
-            if (pathVisualizer != null)
-            {
-                UpdatePathVisualizations();
-            }
-
-            // Hide build queue UI
-            if (buildQueueUI != null)
-            {
-                buildQueueUI.HideQueue();
-            }
-        }
-
-        /// <summary>
-        /// Select multiple units (box selection)
-        /// </summary>
-        private void SelectMultipleUnits(List<Unit> units)
-        {
-            selectedUnits.Clear();
-            selectedUnits.AddRange(units);
-            selectedUnit = units.Count > 0 ? units[0] : null;
-            activeUnitIndex = 0;
-            selectedStructure = null;
-
-            UpdateSelectedUnitDisplay();
-            UpdateSelectionIndicators();
-
-            // Update path visualization
-            if (pathVisualizer != null)
-            {
-                UpdatePathVisualizations();
-            }
-
-            // Hide build queue UI
-            if (buildQueueUI != null)
-            {
-                buildQueueUI.HideQueue();
-            }
-        }
-
-        /// <summary>
-        /// Update the selected unit text display
-        /// </summary>
-        private void UpdateSelectedUnitDisplay()
-        {
-            if (selectedUnit == null || selectedUnits.Count == 0)
-            {
-                selectedUnitText.text = "No selection";
-                return;
-            }
 
             GameState state = GameManager.Instance.state;
-            Tile tile = state.grid.GetTile(selectedUnit.position);
+            Tile tile = state.grid.GetTile(unit.position);
             string tileInfo = tile != null ? $"Tile: {tile.type}" : "Tile: Unknown";
 
             // Get movement info
-            int movementCapacity = selectedUnit.GetMovementCapacity();
-            int movementRemaining = selectedUnit.movementRemaining;
+            int movementCapacity = unit.GetMovementCapacity();
+            int movementRemaining = unit.movementRemaining;
             string movementInfo = $"Movement: {movementRemaining}/{movementCapacity}";
 
             // Get path info if unit has a pending order
             string pathInfo = "";
-            if (pendingMovePaths.ContainsKey(selectedUnit.id))
+            if (pendingMovePaths.ContainsKey(unit.id))
             {
-                List<HexCoord> path = pendingMovePaths[selectedUnit.id];
-                int pathLength = path.Count - 1;
+                List<HexCoord> path = pendingMovePaths[unit.id];
+                int pathLength = path.Count - 1; // Subtract 1 since path includes starting position
                 int thisTurnMoves = Mathf.Min(movementCapacity, pathLength);
                 int queuedMoves = Mathf.Max(0, pathLength - movementCapacity);
 
@@ -593,98 +394,32 @@ namespace PlunkAndPlunder.UI
                 }
             }
 
-            string orderStatus = unitsWithOrders.Contains(selectedUnit.id) ? "\n[HAS ORDER]" : "";
-            string healthInfo = $"HP: {selectedUnit.health}/{selectedUnit.maxHealth}";
+            string orderStatus = unitsWithOrders.Contains(unit.id) ? "\n[HAS ORDER]" : "";
+            string healthInfo = $"HP: {unit.health}/{unit.maxHealth}";
+            string upgradeInfo = $"Sails: {unit.sails} | Cannons: {unit.cannons}";
+            selectedUnitText.text = $"UNIT\nID: {unit.id}\nOwner: Player {unit.ownerId}\nPosition: {unit.position}\nType: {unit.type}\n{healthInfo}\n{upgradeInfo}\n{tileInfo}\n{movementInfo}{pathInfo}{orderStatus}";
 
-            // Show upgrade stats
-            string upgradeInfo = $"Sails: {selectedUnit.sails} | Cannons: {selectedUnit.cannons}";
-
-            // Show selection group info if multiple units selected
-            string groupInfo = selectedUnits.Count > 1 ? $"\n\n[GROUP: {activeUnitIndex + 1}/{selectedUnits.Count}]\nPress TAB to cycle" : "";
-
-            selectedUnitText.text = $"UNIT\nID: {selectedUnit.id}\nOwner: Player {selectedUnit.ownerId}\nPosition: {selectedUnit.position}\nType: {selectedUnit.type}\n{healthInfo}\n{upgradeInfo}\n{tileInfo}\n{movementInfo}{pathInfo}{orderStatus}{groupInfo}";
-        }
-
-        /// <summary>
-        /// Update selection indicators for all selected units
-        /// </summary>
-        private void UpdateSelectionIndicators()
-        {
+            // Show selection indicator
             var unitRenderer = FindObjectOfType<UnitRenderer>();
-            if (unitRenderer == null)
-                return;
-
-            // Hide all existing indicators
-            unitRenderer.HideSelectionIndicator();
-
-            // Show indicators for all selected units
-            foreach (Unit unit in selectedUnits)
+            if (unitRenderer != null)
             {
                 unitRenderer.ShowSelectionIndicator(unit.id);
 
                 // Update indicator state based on whether unit has an order
                 UpdateSelectionIndicatorState(unit.id);
             }
-        }
 
-        /// <summary>
-        /// Set destination for all selected units
-        /// </summary>
-        private void SetSelectedUnitsDestination(HexCoord destination)
-        {
-            if (selectedUnits.Count == 0 || GameManager.Instance == null)
-                return;
-
-            Pathfinding pathfinding = GameManager.Instance.GetPathfinding();
-            int ordersSet = 0;
-
-            foreach (Unit unit in selectedUnits)
+            // Update path visualization - set this unit's path as primary if it exists
+            if (pathVisualizer != null)
             {
-                // Only move human player units
-                if (unit.ownerId != 0)
-                    continue;
-
-                List<HexCoord> path = pathfinding.FindPath(unit.position, destination, 10);
-
-                if (path != null && path.Count > 1)
-                {
-                    // Remove existing move order for this unit if any
-                    pendingPlayerOrders.RemoveAll(o => o is MoveOrder moveOrder && moveOrder.unitId == unit.id);
-
-                    // Add move order to pending orders
-                    MoveOrder order = new MoveOrder(unit.id, 0, path);
-                    pendingPlayerOrders.Add(order);
-
-                    // Track that this unit has an order
-                    unitsWithOrders.Add(unit.id);
-
-                    // Store the path for this unit
-                    pendingMovePaths[unit.id] = path;
-
-                    ordersSet++;
-
-                    // Update selection indicator to OrderSet state
-                    UpdateSelectionIndicatorState(unit.id);
-                }
+                UpdatePathVisualizations();
             }
 
-            if (ordersSet > 0)
+            // Hide build queue UI
+            if (buildQueueUI != null)
             {
-                Debug.Log($"[GameHUD] Set move orders for {ordersSet}/{selectedUnits.Count} selected units to {destination}");
-                UpdateSelectedUnitDisplay();
-
-                // Update path visualization
-                if (pathVisualizer != null)
-                {
-                    UpdatePathVisualizations();
-                }
+                buildQueueUI.HideQueue();
             }
-        }
-
-        private void SelectUnit(Unit unit)
-        {
-            // Legacy method - redirect to new single unit selection
-            SelectSingleUnit(unit);
         }
 
         private void SelectStructure(Structure structure)
@@ -723,8 +458,6 @@ namespace PlunkAndPlunder.UI
         private void ClearSelection()
         {
             selectedUnit = null;
-            selectedUnits.Clear();
-            activeUnitIndex = 0;
             selectedStructure = null;
             plannedPath = null;
             selectedUnitText.text = "No selection";
@@ -751,8 +484,45 @@ namespace PlunkAndPlunder.UI
 
         private void SetUnitDestination(HexCoord destination)
         {
-            // Legacy method - redirect to new multi-unit destination method
-            SetSelectedUnitsDestination(destination);
+            if (selectedUnit == null || GameManager.Instance == null)
+                return;
+
+            // Don't allow moving if not owned by human player
+            if (selectedUnit.ownerId != 0)
+                return;
+
+            Pathfinding pathfinding = GameManager.Instance.GetPathfinding();
+            List<HexCoord> path = pathfinding.FindPath(selectedUnit.position, destination, 10);
+
+            if (path != null && path.Count > 1)
+            {
+                plannedPath = path;
+
+                // Remove existing move order for this unit if any
+                pendingPlayerOrders.RemoveAll(o => o is MoveOrder moveOrder && moveOrder.unitId == selectedUnit.id);
+
+                // Add move order to pending orders
+                MoveOrder order = new MoveOrder(selectedUnit.id, 0, path);
+                pendingPlayerOrders.Add(order);
+
+                // Track that this unit has an order
+                unitsWithOrders.Add(selectedUnit.id);
+
+                // Store the path for this unit
+                pendingMovePaths[selectedUnit.id] = path;
+
+                Debug.Log($"[GameHUD] Planned path for {selectedUnit.id}: {path.Count} steps");
+                selectedUnitText.text += "\n\nMove order queued!";
+
+                // Update selection indicator to OrderSet state
+                UpdateSelectionIndicatorState(selectedUnit.id);
+
+                // Update path visualization - add/update this unit's path
+                if (pathVisualizer != null)
+                {
+                    UpdatePathVisualizations();
+                }
+            }
         }
 
         private void OnSubmitClicked()
