@@ -38,6 +38,8 @@ namespace PlunkAndPlunder.Rendering
 
         public void RenderUnits(UnitManager unitManager)
         {
+            Debug.Log($"[UnitRenderer] RenderUnits called with {unitManager.GetAllUnits().Count} units");
+
             // Remove destroyed units
             List<string> toRemove = new List<string>();
             foreach (string unitId in unitObjects.Keys)
@@ -80,6 +82,9 @@ namespace PlunkAndPlunder.Rendering
                     updated++;
                 }
             }
+
+            // Apply stacking offsets for units on the same tile
+            ApplyStackingOffsets(unitManager);
 
             if (created > 0 || updated > 0)
             {
@@ -272,6 +277,7 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 worldPos = unit.position.ToWorldPosition(hexSize);
                 worldPos.y = unitHeight;
                 unitObj.transform.position = worldPos;
+                Debug.Log($"[UnitRenderer] Updated unit {unit.id} position to {unit.position} (world: {worldPos})");
 
                 // Update rotation based on facing direction
                 unitObj.transform.rotation = Quaternion.Euler(0, unit.facingAngle, 0);
@@ -299,6 +305,93 @@ namespace PlunkAndPlunder.Rendering
 
                 // Update health bar
                 UpdateHealthBar(unit);
+
+                // Update selection indicator position if it exists
+                if (selectionIndicators.TryGetValue(unit.id, out GameObject indicator))
+                {
+                    indicator.transform.position = new Vector3(
+                        unitObj.transform.position.x,
+                        0.05f,
+                        unitObj.transform.position.z
+                    );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Apply visual offsets to ships that occupy the same tile
+        /// Ships from the same player get stacked with visible offsets
+        /// </summary>
+        private void ApplyStackingOffsets(UnitManager unitManager)
+        {
+            // Group units by their hex position
+            Dictionary<HexCoord, List<Unit>> unitsByPosition = new Dictionary<HexCoord, List<Unit>>();
+
+            foreach (Unit unit in unitManager.GetAllUnits())
+            {
+                if (!unitsByPosition.ContainsKey(unit.position))
+                {
+                    unitsByPosition[unit.position] = new List<Unit>();
+                }
+                unitsByPosition[unit.position].Add(unit);
+            }
+
+            // Apply offsets to stacked units
+            foreach (var kvp in unitsByPosition)
+            {
+                HexCoord position = kvp.Key;
+                List<Unit> unitsAtPosition = kvp.Value;
+
+                // Only apply offsets if multiple units at same position
+                if (unitsAtPosition.Count > 1)
+                {
+                    // Calculate offset pattern based on number of units
+                    float offsetRadius = 0.3f; // How far from center to offset
+
+                    for (int i = 0; i < unitsAtPosition.Count; i++)
+                    {
+                        Unit unit = unitsAtPosition[i];
+                        if (!unitObjects.TryGetValue(unit.id, out GameObject unitObj))
+                            continue;
+
+                        Vector3 basePos = position.ToWorldPosition(hexSize);
+                        basePos.y = unitHeight;
+
+                        // Calculate offset in a circular pattern
+                        if (unitsAtPosition.Count == 2)
+                        {
+                            // For 2 ships: offset left and right
+                            float offsetX = (i == 0) ? -offsetRadius : offsetRadius;
+                            basePos.x += offsetX;
+                        }
+                        else if (unitsAtPosition.Count == 3)
+                        {
+                            // For 3 ships: triangle formation
+                            float angle = (i * 120f) * Mathf.Deg2Rad;
+                            basePos.x += Mathf.Cos(angle) * offsetRadius;
+                            basePos.z += Mathf.Sin(angle) * offsetRadius;
+                        }
+                        else
+                        {
+                            // For 4+ ships: circular formation
+                            float angle = (i * 360f / unitsAtPosition.Count) * Mathf.Deg2Rad;
+                            basePos.x += Mathf.Cos(angle) * offsetRadius;
+                            basePos.z += Mathf.Sin(angle) * offsetRadius;
+                        }
+
+                        unitObj.transform.position = basePos;
+
+                        // Also update selection indicator position if it exists
+                        if (selectionIndicators.TryGetValue(unit.id, out GameObject indicator))
+                        {
+                            indicator.transform.position = new Vector3(
+                                basePos.x,
+                                0.05f,
+                                basePos.z
+                            );
+                        }
+                    }
+                }
             }
         }
 
@@ -379,15 +472,16 @@ namespace PlunkAndPlunder.Rendering
         /// </summary>
         public void ShowSelectionIndicator(string unitId)
         {
-            // Remove any existing selection indicator
-            HideSelectionIndicator();
-
             if (!unitObjects.TryGetValue(unitId, out GameObject unitObj))
+                return;
+
+            // Check if indicator already exists for this unit
+            if (selectionIndicators.ContainsKey(unitId))
                 return;
 
             // Create selection indicator - a glowing ring at the base
             GameObject indicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            indicator.name = "SelectionIndicator";
+            indicator.name = $"SelectionIndicator_{unitId}";
 
             // Position at base of unit
             indicator.transform.position = new Vector3(

@@ -31,25 +31,38 @@ namespace PlunkAndPlunder.Rendering
 
         private void CreateMaterials()
         {
+            // Find shader - try Standard first, fall back to built-in shaders
+            Shader shader = Shader.Find("Standard");
+            if (shader == null)
+            {
+                shader = Shader.Find("Legacy Shaders/Diffuse");
+                Debug.LogWarning("[HexRenderer] Standard shader not found, using Legacy Diffuse");
+            }
+            if (shader == null)
+            {
+                shader = Shader.Find("Unlit/Color");
+                Debug.LogWarning("[HexRenderer] Diffuse shader not found, using Unlit/Color");
+            }
+
             if (seaMaterial == null)
             {
-                seaMaterial = new Material(Shader.Find("Standard"));
+                seaMaterial = new Material(shader);
                 seaMaterial.color = new Color(0.1f, 0.3f, 0.7f); // Darker blue for water
             }
 
             if (landMaterial == null)
             {
-                landMaterial = new Material(Shader.Find("Standard"));
+                landMaterial = new Material(shader);
                 landMaterial.color = new Color(0.3f, 0.7f, 0.2f); // Brighter green for land
             }
 
             if (harborMaterial == null)
             {
-                harborMaterial = new Material(Shader.Find("Standard"));
+                harborMaterial = new Material(shader);
                 harborMaterial.color = new Color(0.8f, 0.6f, 0.3f); // Brighter brown/tan for harbor
             }
 
-            Debug.Log("[HexRenderer] Materials created - Sea: blue, Land: green, Harbor: tan");
+            Debug.Log($"[HexRenderer] Materials created with shader: {shader.name}");
         }
 
         public void RenderGrid(HexGrid grid)
@@ -114,8 +127,49 @@ namespace PlunkAndPlunder.Rendering
             // tileObj.tag = "Tile";
             tileObj.layer = LayerMask.NameToLayer("Default");
 
+            // Add black border around hex
+            AddHexBorder(tileObj);
+
             // Store reference
             tileObjects[tile.coord] = tileObj;
+        }
+
+        private void AddHexBorder(GameObject tileObj)
+        {
+            // Create border line renderer
+            GameObject borderObj = new GameObject("Border");
+            borderObj.transform.SetParent(tileObj.transform, false);
+            borderObj.transform.localPosition = Vector3.up * 0.01f; // Slightly above tile to prevent z-fighting
+
+            LineRenderer lineRenderer = borderObj.AddComponent<LineRenderer>();
+            lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+            lineRenderer.startColor = Color.black;
+            lineRenderer.endColor = Color.black;
+            lineRenderer.startWidth = 0.05f;
+            lineRenderer.endWidth = 0.05f;
+            lineRenderer.positionCount = 7; // 6 vertices + 1 to close the loop
+            lineRenderer.loop = true;
+            lineRenderer.useWorldSpace = false;
+
+            // Set hex border vertices
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = (60f * i + 30f) * Mathf.Deg2Rad;
+                Vector3 vertex = new Vector3(
+                    hexSize * Mathf.Cos(angle),
+                    0f,
+                    hexSize * Mathf.Sin(angle)
+                );
+                lineRenderer.SetPosition(i, vertex);
+            }
+
+            // Close the loop
+            float angle0 = 30f * Mathf.Deg2Rad;
+            lineRenderer.SetPosition(6, new Vector3(
+                hexSize * Mathf.Cos(angle0),
+                0f,
+                hexSize * Mathf.Sin(angle0)
+            ));
         }
 
         private Mesh CreateHexMesh()

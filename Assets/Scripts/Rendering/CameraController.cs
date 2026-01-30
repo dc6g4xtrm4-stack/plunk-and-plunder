@@ -37,11 +37,11 @@ namespace PlunkAndPlunder.Rendering
                 cam = Camera.main;
             }
 
-            // Position camera for top-down view
+            // Position camera for top-down view (start zoomed in more)
             if (cam != null)
             {
                 transform.rotation = Quaternion.Euler(70f, 0f, 0f);
-                transform.position = new Vector3(0f, 50f, -25f);
+                transform.position = new Vector3(0f, 15f, -7.5f); // Start more zoomed in
                 targetPosition = transform.position;
                 cam.fieldOfView = 75f;
                 cam.backgroundColor = Color.black; // Black background for contrast
@@ -144,7 +144,8 @@ namespace PlunkAndPlunder.Rendering
         {
             Vector3 newPos = transform.position;
             newPos.x = worldPosition.x;
-            newPos.z = worldPosition.z - 10f; // Offset for camera angle
+            newPos.y = 15f; // Zoomed in more on starting position
+            newPos.z = worldPosition.z - 7.5f; // Offset for camera angle
 
             if (smooth)
             {

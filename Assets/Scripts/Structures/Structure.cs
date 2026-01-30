@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using PlunkAndPlunder.Map;
 
 namespace PlunkAndPlunder.Structures
@@ -12,6 +13,7 @@ namespace PlunkAndPlunder.Structures
         public StructureType type;
         public int health;
         public int maxHealth;
+        public List<BuildQueueItem> buildQueue = new List<BuildQueueItem>();
 
         public Structure(string id, int ownerId, HexCoord position, StructureType type)
         {

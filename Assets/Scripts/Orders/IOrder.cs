@@ -17,7 +17,10 @@ namespace PlunkAndPlunder.Orders
         DeployShipyard,
         BuildShip,
         RepairShip,
-        UpgradeShip
+        UpgradeShip,
+        UpgradeSails,
+        UpgradeCannons,
+        UpgradeMaxLife
     }
 
     [Serializable]
@@ -130,6 +133,72 @@ namespace PlunkAndPlunder.Orders
         public OrderType GetOrderType()
         {
             return OrderType.UpgradeShip;
+        }
+    }
+
+    [Serializable]
+    public class UpgradeSailsOrder : IOrder
+    {
+        public string unitId { get; set; }
+        public int playerId { get; set; }
+        public string shipyardId;
+        public HexCoord shipyardPosition;
+
+        public UpgradeSailsOrder(string unitId, int playerId, string shipyardId, HexCoord shipyardPosition)
+        {
+            this.unitId = unitId;
+            this.playerId = playerId;
+            this.shipyardId = shipyardId;
+            this.shipyardPosition = shipyardPosition;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.UpgradeSails;
+        }
+    }
+
+    [Serializable]
+    public class UpgradeCannonsOrder : IOrder
+    {
+        public string unitId { get; set; }
+        public int playerId { get; set; }
+        public string shipyardId;
+        public HexCoord shipyardPosition;
+
+        public UpgradeCannonsOrder(string unitId, int playerId, string shipyardId, HexCoord shipyardPosition)
+        {
+            this.unitId = unitId;
+            this.playerId = playerId;
+            this.shipyardId = shipyardId;
+            this.shipyardPosition = shipyardPosition;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.UpgradeCannons;
+        }
+    }
+
+    [Serializable]
+    public class UpgradeMaxLifeOrder : IOrder
+    {
+        public string unitId { get; set; }
+        public int playerId { get; set; }
+        public string shipyardId;
+        public HexCoord shipyardPosition;
+
+        public UpgradeMaxLifeOrder(string unitId, int playerId, string shipyardId, HexCoord shipyardPosition)
+        {
+            this.unitId = unitId;
+            this.playerId = playerId;
+            this.shipyardId = shipyardId;
+            this.shipyardPosition = shipyardPosition;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.UpgradeMaxLife;
         }
     }
 }

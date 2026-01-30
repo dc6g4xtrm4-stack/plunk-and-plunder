@@ -19,8 +19,9 @@ namespace PlunkAndPlunder.Combat
 
         /// <summary>
         /// Resolve combat between attacker and defender using dice rolls
+        /// Cannons upgrades add bonus damage to successful hits
         /// </summary>
-        public CombatResult ResolveCombat(string attackerId, string defenderId)
+        public CombatResult ResolveCombat(string attackerId, string defenderId, int attackerCannons = 0, int defenderCannons = 0)
         {
             // Attacker rolls 3 dice
             List<int> attackerRolls = RollDice(3);
@@ -45,13 +46,13 @@ namespace PlunkAndPlunder.Combat
             {
                 if (attackerTop2[i] > defenderTop2[i])
                 {
-                    // Attacker wins this comparison - defender takes 2 damage
-                    defenderDamage += 2;
+                    // Attacker wins this comparison - defender takes base 2 damage plus cannon bonus
+                    defenderDamage += 2 + attackerCannons;
                 }
                 else
                 {
-                    // Defender wins this comparison (including ties) - attacker takes 2 damage
-                    attackerDamage += 2;
+                    // Defender wins this comparison (including ties) - attacker takes base 2 damage plus cannon bonus
+                    attackerDamage += 2 + defenderCannons;
                 }
             }
 

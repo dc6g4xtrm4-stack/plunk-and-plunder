@@ -29,10 +29,14 @@ namespace PlunkAndPlunder.Core
         TurnStarted,
         ShipyardDeployed,
         ShipBuilt,
+        ShipQueued,
         ShipRepaired,
         ShipUpgraded,
         CombatOccurred,
-        ConflictDetected
+        ConflictDetected,
+        CollisionDetected,
+        CollisionNeedsResolution,
+        CollisionResolved
     }
 
     [Serializable]
@@ -230,6 +234,48 @@ namespace PlunkAndPlunder.Core
         {
             this.unitIds = unitIds;
             this.position = position;
+        }
+    }
+
+    [Serializable]
+    public class CollisionDetectedEvent : GameEvent
+    {
+        public List<string> unitIds;
+        public HexCoord destination;
+
+        public CollisionDetectedEvent(int turnNumber, List<string> unitIds, HexCoord destination)
+            : base(turnNumber, GameEventType.CollisionDetected, $"{unitIds.Count} units colliding at {destination}")
+        {
+            this.unitIds = unitIds;
+            this.destination = destination;
+        }
+    }
+
+    [Serializable]
+    public class CollisionNeedsResolutionEvent : GameEvent
+    {
+        public CollisionInfo collision;
+
+        public CollisionNeedsResolutionEvent(int turnNumber, CollisionInfo collision)
+            : base(turnNumber, GameEventType.CollisionNeedsResolution, $"Collision at {collision.destination} needs yield decisions")
+        {
+            this.collision = collision;
+        }
+    }
+
+    [Serializable]
+    public class CollisionResolvedEvent : GameEvent
+    {
+        public List<string> unitIds;
+        public HexCoord destination;
+        public string resolution;
+
+        public CollisionResolvedEvent(int turnNumber, List<string> unitIds, HexCoord destination, string resolution)
+            : base(turnNumber, GameEventType.CollisionResolved, resolution)
+        {
+            this.unitIds = unitIds;
+            this.destination = destination;
+            this.resolution = resolution;
         }
     }
 }

@@ -18,6 +18,14 @@ namespace PlunkAndPlunder.Units
         public int movementRemaining; // Movement remaining this turn
         public List<HexCoord> queuedPath; // Path queued from previous turn (for multi-turn moves)
 
+        // Ship upgrade stats
+        public int sails; // Affects movement range
+        public int cannons; // Affects combat effectiveness
+
+        // Multi-turn combat tracking
+        public bool isInCombat;
+        public string combatOpponentId;
+
         public Unit(string id, int ownerId, HexCoord position, UnitType type)
         {
             this.id = id;
@@ -28,6 +36,10 @@ namespace PlunkAndPlunder.Units
             this.maxHealth = 10;
             this.facingAngle = 0f; // Default facing east
             this.movementRemaining = GetMovementCapacity(); // Initialize with full movement
+            this.sails = 0; // Base ships have no sail upgrades
+            this.cannons = 0; // Base ships have no cannon upgrades
+            this.isInCombat = false;
+            this.combatOpponentId = null;
         }
 
         /// <summary>
@@ -47,11 +59,12 @@ namespace PlunkAndPlunder.Units
         }
 
         /// <summary>
-        /// Get the maximum movement capacity for this unit based on its tier
+        /// Get the maximum movement capacity for this unit based on its tier and sails upgrades
         /// Tier is determined by maxHealth thresholds:
         /// Tier 1 (maxHealth 1-10): 3 movement
         /// Tier 2 (maxHealth 11-20): 4 movement
         /// Tier 3 (maxHealth 21+): 5 movement
+        /// Sails upgrades add +1 movement per upgrade
         /// </summary>
         public int GetMovementCapacity()
         {
@@ -62,8 +75,8 @@ namespace PlunkAndPlunder.Units
             else if (maxHealth >= 11)
                 tier = 2;
 
-            // Base movement of 3, plus bonus based on tier
-            return 3 + (tier - 1);
+            // Base movement of 3, plus bonus based on tier, plus sails upgrades
+            return 3 + (tier - 1) + sails;
         }
 
         /// <summary>

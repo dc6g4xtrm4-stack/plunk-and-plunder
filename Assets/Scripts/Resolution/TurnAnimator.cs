@@ -59,6 +59,12 @@ namespace PlunkAndPlunder.Resolution
                 return;
             }
 
+            Debug.Log($"[TurnAnimator] AnimateEvents called with {events.Count} events");
+            for (int i = 0; i < events.Count; i++)
+            {
+                Debug.Log($"[TurnAnimator]   Event {i}: {events[i].type}");
+            }
+
             StartCoroutine(AnimateEventsCoroutine(events, state));
         }
 
@@ -66,16 +72,39 @@ namespace PlunkAndPlunder.Resolution
         {
             isAnimating = true;
 
+            Debug.Log($"[TurnAnimator] ===== STARTING ANIMATION PHASE =====");
             Debug.Log($"[TurnAnimator] Starting animation of {events.Count} events");
+
+            // Separate movement events from other events
+            List<UnitMovedEvent> moveEvents = new List<UnitMovedEvent>();
+            List<GameEvent> otherEvents = new List<GameEvent>();
 
             foreach (GameEvent gameEvent in events)
             {
+                if (gameEvent is UnitMovedEvent moveEvent)
+                {
+                    moveEvents.Add(moveEvent);
+                }
+                else
+                {
+                    otherEvents.Add(gameEvent);
+                }
+            }
+
+            Debug.Log($"[TurnAnimator] Event breakdown: {moveEvents.Count} movement events, {otherEvents.Count} other events");
+
+            // Animate all movements simultaneously (step-by-step)
+            if (moveEvents.Count > 0)
+            {
+                yield return AnimateSimultaneousMovement(moveEvents, state);
+            }
+
+            // Then animate other events sequentially
+            Debug.Log($"[TurnAnimator] Movement complete, now animating {otherEvents.Count} other events");
+            foreach (GameEvent gameEvent in otherEvents)
+            {
                 switch (gameEvent)
                 {
-                    case UnitMovedEvent moveEvent:
-                        yield return AnimateMovement(moveEvent, state);
-                        break;
-
                     case UnitDestroyedEvent destroyEvent:
                         yield return AnimateDestruction(destroyEvent, state);
                         break;
@@ -108,6 +137,21 @@ namespace PlunkAndPlunder.Resolution
                         yield return AnimateConflictDetected(conflictEvent, state);
                         break;
 
+                    case CollisionDetectedEvent collisionDetectedEvent:
+                        // Collision detected - log it but don't animate (UI handles this)
+                        Debug.Log($"[TurnAnimator] Collision detected at {collisionDetectedEvent.destination}");
+                        yield return new WaitForSeconds(eventPauseDelay);
+                        break;
+
+                    case CollisionNeedsResolutionEvent collisionNeedsResolutionEvent:
+                        // Skip animation - this is handled by the collision resolution UI
+                        break;
+
+                    case CollisionResolvedEvent collisionResolvedEvent:
+                        Debug.Log($"[TurnAnimator] Collision resolved: {collisionResolvedEvent.resolution}");
+                        yield return new WaitForSeconds(eventPauseDelay);
+                        break;
+
                     default:
                         // Instant events - just pause briefly
                         yield return new WaitForSeconds(eventPauseDelay);
@@ -115,10 +159,85 @@ namespace PlunkAndPlunder.Resolution
                 }
             }
 
-            Debug.Log("[TurnAnimator] Animation complete");
+            Debug.Log("[TurnAnimator] ===== ANIMATION PHASE COMPLETE =====");
 
             isAnimating = false;
             OnAnimationComplete?.Invoke();
+        }
+
+        /// <summary>
+        /// Animate all unit movements simultaneously, step-by-step
+        /// All units take their first step together, then second step, etc.
+        /// </summary>
+        private IEnumerator AnimateSimultaneousMovement(List<UnitMovedEvent> moveEvents, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating {moveEvents.Count} units simultaneously");
+
+            // Build a dictionary of unit ID -> path
+            Dictionary<string, List<HexCoord>> unitPaths = new Dictionary<string, List<HexCoord>>();
+            Dictionary<string, int> unitCurrentStep = new Dictionary<string, int>();
+
+            int maxPathLength = 0;
+
+            foreach (UnitMovedEvent moveEvent in moveEvents)
+            {
+                if (moveEvent.path != null && moveEvent.path.Count > 1)
+                {
+                    unitPaths[moveEvent.unitId] = moveEvent.path;
+                    unitCurrentStep[moveEvent.unitId] = 0; // Start at index 0
+                    maxPathLength = Mathf.Max(maxPathLength, moveEvent.path.Count);
+                }
+            }
+
+            if (maxPathLength == 0)
+            {
+                Debug.Log("[TurnAnimator] No paths to animate");
+                yield break;
+            }
+
+            Debug.Log($"[TurnAnimator] Max path length: {maxPathLength}, animating step-by-step");
+
+            // Animate step-by-step: all units move together
+            for (int step = 0; step < maxPathLength; step++)
+            {
+                bool anyUnitMoved = false;
+
+                // Move all units that have a step at this index
+                foreach (var kvp in unitPaths)
+                {
+                    string unitId = kvp.Key;
+                    List<HexCoord> path = kvp.Value;
+                    int currentStepIndex = unitCurrentStep[unitId];
+
+                    // Check if this unit still has steps to take
+                    if (currentStepIndex < path.Count)
+                    {
+                        HexCoord nextPos = path[currentStepIndex];
+
+                        // Move the unit
+                        unitManager.MoveUnit(unitId, nextPos);
+                        unitCurrentStep[unitId]++;
+                        anyUnitMoved = true;
+
+                        if (step == 0 || currentStepIndex % 5 == 0)
+                        {
+                            Debug.Log($"[TurnAnimator] Step {step}: Unit {unitId} moved to {nextPos}");
+                        }
+                    }
+                }
+
+                // Fire animation step event so rendering can update
+                if (anyUnitMoved)
+                {
+                    Debug.Log($"[TurnAnimator] Step {step} complete, firing OnAnimationStep event");
+                    OnAnimationStep?.Invoke(state);
+
+                    // Wait before next step
+                    yield return new WaitForSeconds(hexStepDelay);
+                }
+            }
+
+            Debug.Log("[TurnAnimator] Simultaneous movement animation complete");
         }
 
         /// <summary>
