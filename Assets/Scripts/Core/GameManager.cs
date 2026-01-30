@@ -185,7 +185,7 @@ namespace PlunkAndPlunder.Core
                     HexCoord shipyardPos = playerShipyards[0].position;
 
                     // Find adjacent sea tiles to place ships
-                    List<HexCoord> adjacentTiles = shipyardPos.GetNeighbors();
+                    List<HexCoord> adjacentTiles = new List<HexCoord>(shipyardPos.GetNeighbors());
                     List<HexCoord> validStartPositions = new List<HexCoord>();
 
                     foreach (HexCoord neighbor in adjacentTiles)
