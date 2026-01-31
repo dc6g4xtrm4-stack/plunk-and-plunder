@@ -186,13 +186,13 @@ namespace PlunkAndPlunder.UI
             return button;
         }
 
-        public void ShowCombatResults(CombatOccurredEvent combatEvent, Unit attacker, Unit defender, Action callback)
+        public void ShowCombatResults(CombatOccurredEvent combatEvent, Unit attacker, Unit defender, Action callback, PlunkAndPlunder.Players.PlayerManager playerManager = null)
         {
             onContinueCallback = callback;
 
-            // Set unit names
-            attackerNameText.text = $"{combatEvent.attackerId}\nPlayer {attacker.ownerId}";
-            defenderNameText.text = $"{combatEvent.defenderId}\nPlayer {defender.ownerId}";
+            // Set unit names using display names
+            attackerNameText.text = attacker.GetDisplayName(playerManager);
+            defenderNameText.text = defender.GetDisplayName(playerManager);
 
             // Format dice rolls with highest 2 highlighted for attacker
             string attackerDiceDisplay = FormatDiceRolls(combatEvent.attackerRolls, true);

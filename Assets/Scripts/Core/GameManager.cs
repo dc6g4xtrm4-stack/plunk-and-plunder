@@ -768,7 +768,7 @@ namespace PlunkAndPlunder.Core
                 // Show dice combat UI
                 if (diceCombatUI != null)
                 {
-                    diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue);
+                    diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue, state.playerManager);
 
                     // Increment round number for next combat between these units
                     combatRounds[combatKey] = roundNumber + 1;
@@ -778,7 +778,7 @@ namespace PlunkAndPlunder.Core
                     // Fallback to old UI if dice UI not available
                     if (combatResultsUI != null)
                     {
-                        combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue);
+                        combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue, state.playerManager);
                     }
                 }
             }

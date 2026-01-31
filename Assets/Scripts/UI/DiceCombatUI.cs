@@ -215,7 +215,7 @@ namespace PlunkAndPlunder.UI
             return button;
         }
 
-        public void ShowCombat(CombatOccurredEvent combatEvent, Unit attacker, Unit defender, int roundNumber, Action callback)
+        public void ShowCombat(CombatOccurredEvent combatEvent, Unit attacker, Unit defender, int roundNumber, Action callback, PlunkAndPlunder.Players.PlayerManager playerManager = null)
         {
             Debug.Log($"[DiceCombatUI] ShowCombat called - Round {roundNumber}: {attacker.id} vs {defender.id}");
             onContinueCallback = callback;
@@ -227,9 +227,12 @@ namespace PlunkAndPlunder.UI
             // Update title with round number
             titleText.text = $"COMBAT - Round {roundNumber}";
 
-            // Update ship names and health
-            attackerNameText.text = $"{attacker.id}\n(Player {attacker.ownerId})";
-            defenderNameText.text = $"{defender.id}\n(Player {defender.ownerId})";
+            // Update ship names and health using display names
+            string attackerDisplayName = attacker.GetDisplayName(playerManager);
+            string defenderDisplayName = defender.GetDisplayName(playerManager);
+
+            attackerNameText.text = attackerDisplayName;
+            defenderNameText.text = defenderDisplayName;
 
             attackerHealthText.text = $"HP: {attacker.health}/{attacker.maxHealth}";
             defenderHealthText.text = $"HP: {defender.health}/{defender.maxHealth}";
@@ -256,41 +259,82 @@ namespace PlunkAndPlunder.UI
             continueButton.interactable = false;
             resultText.text = "Rolling dice...";
 
-            // Create dice objects (initially showing random faces)
+            // Create dice objects (initially transparent)
             CreateDiceObjects(attackerDiceContainer, 3, attackerDiceObjects);
             CreateDiceObjects(defenderDiceContainer, 2, defenderDiceObjects);
 
-            // Shake animation for 1 second
-            float shakeDuration = 1.0f;
-            float shakeIntensity = 15f;
+            // Smooth fade-in and pulse animation (1.2 seconds total)
+            float animationDuration = 1.2f;
             isShaking = true;
 
             float elapsed = 0f;
-            while (elapsed < shakeDuration)
+            while (elapsed < animationDuration)
             {
-                // Random shake offsets
-                float randomX = UnityEngine.Random.Range(-shakeIntensity, shakeIntensity);
-                float randomY = UnityEngine.Random.Range(-shakeIntensity, shakeIntensity);
+                float progress = elapsed / animationDuration;
 
-                attackerDiceContainer.GetComponent<RectTransform>().anchoredPosition = new Vector2(randomX, -25 + randomY);
-                defenderDiceContainer.GetComponent<RectTransform>().anchoredPosition = new Vector2(randomX, -25 + randomY);
+                // Smooth fade-in using ease-out curve
+                float alpha = Mathf.SmoothStep(0f, 1f, Mathf.Min(progress * 2f, 1f));
 
-                // Randomly change dice faces during shake
+                // Gentle pulse effect (scale oscillation)
+                float pulseSpeed = 8f; // Cycles per second
+                float pulseAmount = 0.1f; // 10% size variation
+                float scale = 1f + pulseAmount * Mathf.Sin(progress * Mathf.PI * 2f * pulseSpeed) * (1f - progress * 0.5f); // Dampen pulse over time
+
+                // Cycle through dice faces smoothly (slower than jittery version)
+                int cycleSpeed = 8; // Lower = slower cycling
+                int currentFrame = Mathf.FloorToInt(progress * animationDuration * cycleSpeed);
+
+                // Apply fade and pulse to attacker dice
                 for (int i = 0; i < attackerDiceObjects.Count; i++)
                 {
-                    Text diceText = attackerDiceObjects[i].GetComponentInChildren<Text>();
+                    GameObject diceObj = attackerDiceObjects[i];
+                    Image diceImage = diceObj.GetComponent<Image>();
+                    if (diceImage != null)
+                    {
+                        Color imageColor = diceImage.color;
+                        imageColor.a = alpha;
+                        diceImage.color = imageColor;
+                    }
+
+                    diceObj.transform.localScale = Vector3.one * scale;
+
+                    Text diceText = diceObj.GetComponentInChildren<Text>();
                     if (diceText != null)
                     {
-                        diceText.text = GetDiceDots(UnityEngine.Random.Range(1, 7)); // Use dots instead of numbers
+                        // Cycle through dice faces (use frame-based instead of fully random for smoother appearance)
+                        int faceValue = ((currentFrame + i) % 6) + 1;
+                        diceText.text = GetDiceDots(faceValue);
+
+                        Color textColor = diceText.color;
+                        textColor.a = alpha;
+                        diceText.color = textColor;
                     }
                 }
 
+                // Apply fade and pulse to defender dice
                 for (int i = 0; i < defenderDiceObjects.Count; i++)
                 {
-                    Text diceText = defenderDiceObjects[i].GetComponentInChildren<Text>();
+                    GameObject diceObj = defenderDiceObjects[i];
+                    Image diceImage = diceObj.GetComponent<Image>();
+                    if (diceImage != null)
+                    {
+                        Color imageColor = diceImage.color;
+                        imageColor.a = alpha;
+                        diceImage.color = imageColor;
+                    }
+
+                    diceObj.transform.localScale = Vector3.one * scale;
+
+                    Text diceText = diceObj.GetComponentInChildren<Text>();
                     if (diceText != null)
                     {
-                        diceText.text = GetDiceDots(UnityEngine.Random.Range(1, 7)); // Use dots instead of numbers
+                        // Cycle through dice faces (offset from attacker for variety)
+                        int faceValue = ((currentFrame + i + 3) % 6) + 1;
+                        diceText.text = GetDiceDots(faceValue);
+
+                        Color textColor = diceText.color;
+                        textColor.a = alpha;
+                        diceText.color = textColor;
                     }
                 }
 
@@ -298,9 +342,46 @@ namespace PlunkAndPlunder.UI
                 yield return null;
             }
 
-            // Reset positions
-            attackerDiceContainer.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -25);
-            defenderDiceContainer.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, -25);
+            // Ensure final state is fully opaque and normal scale
+            foreach (GameObject diceObj in attackerDiceObjects)
+            {
+                Image diceImage = diceObj.GetComponent<Image>();
+                if (diceImage != null)
+                {
+                    Color imageColor = diceImage.color;
+                    imageColor.a = 1f;
+                    diceImage.color = imageColor;
+                }
+                diceObj.transform.localScale = Vector3.one;
+
+                Text diceText = diceObj.GetComponentInChildren<Text>();
+                if (diceText != null)
+                {
+                    Color textColor = diceText.color;
+                    textColor.a = 1f;
+                    diceText.color = textColor;
+                }
+            }
+
+            foreach (GameObject diceObj in defenderDiceObjects)
+            {
+                Image diceImage = diceObj.GetComponent<Image>();
+                if (diceImage != null)
+                {
+                    Color imageColor = diceImage.color;
+                    imageColor.a = 1f;
+                    diceImage.color = imageColor;
+                }
+                diceObj.transform.localScale = Vector3.one;
+
+                Text diceText = diceObj.GetComponentInChildren<Text>();
+                if (diceText != null)
+                {
+                    Color textColor = diceText.color;
+                    textColor.a = 1f;
+                    diceText.color = textColor;
+                }
+            }
 
             isShaking = false;
 
