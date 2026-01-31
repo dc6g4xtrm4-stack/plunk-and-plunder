@@ -1,0 +1,284 @@
+Agent Prompt: Build “Plunk & Plunder” (Unity + Steamworks)
+
+You are a senior Unity engineer building a complete, playable MVP of a Civ-style simultaneous-turn tactics game called Plunk & Plunder for Windows PC, intended for Steam release using Steamworks networking (Steam Lobby + P2P). Produce a fully coded project with minimal manual Unity UI wiring: all UI should be created/connected by code via a UI Bootstrapper and a central GameManager. Prefer clean, modular systems with clear separation of responsibilities.
+
+High-Level Game Design
+
+Title: Plunk & Plunder
+Genre: Civ-style, turn-based (simultaneous resolution), hex grid naval tactics
+Win condition: Eliminate all other players (last player with any units/structures)
+
+Map / Tiles
+
+The world is a hex tile grid consisting primarily of SEA.
+
+Target scale: approximately:
+
+~500 SEA tiles
+
+20–30 islands, each island is a cluster of 4–8 hex tiles
+
+Island tiles can be:
+
+LAND (impassable to ships)
+
+HARBOR (a dock tile ships can occupy; it “connects” sea to the island)
+
+Example composition (not strict): 500 sea tiles + ~100 land tiles + ~25 harbor tiles.
+
+Ships can move on SEA and HARBOR, but cannot move onto LAND.
+
+Harbors are “structures” as well as tile types (treat them as a place ships can dock and interact).
+
+Players
+
+Default: 4 players total
+
+1 human
+
+3 AI (local AI for MVP; later can be network players)
+
+Support future multiplayer: design player system so network players can replace AI without rewriting core gameplay.
+
+Units & Structures
+Units
+
+SHIP
+
+Basic unit
+
+Can move/explore
+
+Can be upgraded/repaired at SHIPYARD (future-ready even if shipyard is not in MVP)
+
+Structures
+
+HARBOR (available structure in this MVP)
+
+Exists as a tile type and a controllable structure
+
+Can be captured/destroyed per design below
+
+Future unit/structure placeholders (scaffold only, no need to fully implement unless quick):
+
+SHIPYARD
+
+Builds new ships
+
+Upgrades/repairs ships
+
+Should be represented in code architecture as a “StructureType” even if not placed yet
+
+Turn System (Simultaneous Moves)
+
+Each turn has phases:
+
+Planning Phase: all players queue orders for their units (move orders for MVP)
+
+Commit/Submit Phase: players submit (AI auto-submits when done)
+
+Resolution Phase: all orders resolve simultaneously
+
+Resolution rules for MVP (define clearly and implement deterministically):
+
+Movement resolves simultaneously in “ticks” along each unit’s planned path (or single-step for MVP).
+
+If two ships attempt to move into the same destination hex:
+
+Deterministic tie-break rule (e.g., both bounce back / neither moves; or priority by player ID; choose one and document).
+
+If ships swap places (A->B and B->A) in the same tick:
+
+Deterministic behavior (allow swap or block swap; choose one and document).
+
+The entire turn must be deterministic across clients: given the same inputs, all clients produce the same resulting state.
+
+Combat / Elimination (MVP-friendly)
+
+Implement minimal combat so “eliminate all players” is possible:
+
+If a ship ends resolution on a hex adjacent to an enemy ship (or same hex conflict), resolve combat deterministically:
+
+Simple combat: 1 HP ships; if conflict occurs, one ship is destroyed using deterministic ordering OR both destroyed; pick and document.
+
+A player is eliminated when they have no ships and no harbors (or simply no ships for MVP—pick one, document).
+
+Steam / Networking Requirements (MVP)
+
+Use Steamworks for:
+
+Creating/joining a lobby
+
+Determining host
+
+Sending turn commands to host, host broadcasts authoritative turn result (or host relays inputs and everyone simulates—pick one approach and document).
+
+MVP acceptable approach:
+
+Host authoritative: clients send their queued orders to host; host resolves turn; host broadcasts resulting state snapshot/events to clients.
+
+Include a “Local Hotseat/Offline” mode to test without Steam.
+
+UI / UX Requirements (Code-Driven)
+
+Minimal Unity scene work. Provide:
+
+UIBootstrapper that creates:
+
+Main menu: Host / Join / Offline / Quit
+
+Lobby screen: list players, ready status, start game (host only)
+
+In-game HUD:
+
+Current turn number + phase
+
+“Submit Orders” button
+
+Selected unit panel (unit type, remaining moves, current planned path)
+
+Basic event log (movement/combat outcomes)
+
+Simple tile/unit hover tooltip
+
+Use Unity UI Toolkit or uGUI — choose one and commit. Prefer UI Toolkit if possible for code-driven UI; otherwise uGUI with programmatic creation.
+
+Camera / Input
+
+Hex grid visualized in 2D top-down or simple 3D (choose quickest).
+
+Mouse controls:
+
+Left click select ship
+
+Right click set destination (pathfinding on sea/harbor)
+
+While in Planning Phase only
+
+Camera: pan + zoom.
+
+Visuals
+
+Use simple primitives/sprites/placeholders generated in code (no art dependency).
+
+Hex tiles should be visibly distinguishable by type (SEA/LAND/HARBOR).
+
+Technical Architecture (Must-Haves)
+
+Implement these systems with clear interfaces:
+
+GameManager
+
+Owns the state machine: MainMenu → Lobby → Loading → Planning → Submitted → Resolving → Planning…
+
+GameState (data-only, serializable)
+
+Full authoritative state: map, players, units, structures, turn number, phase
+
+HexGrid / MapGenerator
+
+Generates random map with described distribution and island clusters
+
+Provides coordinate system (axial or cube coords)
+
+Pathfinding
+
+A* on hex grid
+
+Traversal rules (ship: sea + harbor only)
+
+Command System
+
+IOrder interface, e.g. MoveOrder(unitId, path) (path as list of coords)
+
+Validation rules
+
+Turn Resolver
+
+Deterministic resolution logic
+
+Handles collisions + combat
+
+Produces a list of GameEvents (movement, combat, capture, destruction)
+
+AI Players
+
+Simple AI that:
+
+picks random ship
+
+moves toward nearest enemy/harbor
+
+submits when all ships have orders
+
+Networking Layer
+
+Offline implementation + Steam implementation behind a common interface:
+
+INetworkTransport or IGameNetSession
+
+Host authoritative flow
+
+Serialization of orders and state snapshots/events
+
+Determinism Requirements
+
+No Unity Random during resolution; use a seeded deterministic RNG contained in the resolver if needed.
+
+Stable ordering: sort unit IDs / player IDs before resolving.
+
+All events and outcomes must be reproducible.
+
+Deliverables
+
+Provide:
+
+A Unity project structure with scripts organized by folders:
+
+Core/, Map/, Units/, Orders/, Resolution/, UI/, Networking/, AI/, Utilities/
+
+All code required to:
+
+Run offline with 1 human + 3 AI
+
+Host/join via Steam lobby (stub allowed if Steamworks package integration is heavy, but the interface and flow must be implemented; include integration notes)
+
+Include a README.md with:
+
+Setup steps
+
+How to run offline
+
+How to run Steam lobby test
+
+Known limitations
+
+Include test hooks:
+
+“Auto-Resolve Turn” debug button
+
+Seed input for map generation
+
+Toggle deterministic logging
+
+Constraints / Priorities
+
+Priority 1: playable offline MVP with 1 human + 3 AI, simultaneous planning + deterministic resolution.
+
+Priority 2: Steamworks lobby and order exchange with host authoritative results.
+
+Priority 3: polish (tooltip, event log, camera smoothness).
+
+Implementation Notes (Decide and Document)
+
+Before coding, decide and state:
+
+Hex coordinate system (axial recommended)
+
+UI approach (UI Toolkit or uGUI)
+
+Conflict resolution rules (same destination, swap, combat)
+
+Elimination condition definition
+
+Then implement.

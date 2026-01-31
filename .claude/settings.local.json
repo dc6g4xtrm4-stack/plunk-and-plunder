@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(done)",
+      "Bash(find:*)",
+      "Bash(Get-ChildItem -Path \"$env:LOCALAPPDATA\\\\Unity\\\\Editor\"\" -Filter \"Editor*.log \" -File)",
+      "Bash(Sort-Object LastWriteTime -Descending)",
+      "Bash(Select-Object -First 1)",
+      "Bash(ForEach-Object { Get-Content $_FullName -Tail 100 })",
+      "Bash(powershell -Command:*)",
+      "Bash(findstr:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd complete Plunk & Plunder MVP implementation\n\nImplemented full playable naval tactics game in Unity 6:\n\nFeatures:\n- Hex grid map generator \\(500 sea tiles, 25 islands, harbors\\)\n- Turn-based simultaneous gameplay with 4 players \\(1 human + 3 AI\\)\n- Ship units with sailing visuals and player-colored flags\n- Shipyard buildings for ship construction and upgrades\n- Economy system with doubloons \\(gold currency\\)\n- Ship deployment to create new shipyards on harbors\n- Code-driven UI with main menu, game HUD, tooltips\n- Deterministic turn resolution for network safety\n- AI controller with pathfinding\n- Camera controls \\(pan with WASD, zoom with scroll\\)\n\nTechnical:\n- Axial hex coordinate system with flat-top orientation\n- Interface-based networking \\(offline working, Steam stub ready\\)\n- All UI created programmatically via UIBootstrapper\n- Renderer system for tiles, units, and buildings\n\nBug fixes:\n- Fixed renderer initialization \\(changed Start to Awake\\)\n- Fixed game state accumulation between runs\n- Fixed hex interlocking \\(flat-top mesh vertices\\)\n- Fixed EventSystem for standalone builds\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

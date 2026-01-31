@@ -33,16 +33,16 @@ namespace PlunkAndPlunder.UI
 
         private void CreatePanel()
         {
-            // Create panel on left side of screen, middle height
+            // Create panel on LEFT side of screen, vertically centered
             panel = new GameObject("PlayerStatsPanel");
             panel.transform.SetParent(transform, false);
 
             RectTransform panelRect = panel.AddComponent<RectTransform>();
-            panelRect.anchorMin = new Vector2(0, 0.5f); // Left side, middle height
-            panelRect.anchorMax = new Vector2(0, 0.5f);
-            panelRect.pivot = new Vector2(0, 0.5f);
-            panelRect.anchoredPosition = new Vector2(10, 0); // 10px from left edge, vertically centered
-            panelRect.sizeDelta = new Vector2(350, 200); // Will expand as needed
+            panelRect.anchorMin = new Vector2(0, 0.5f); // Anchor to left edge, vertical center
+            panelRect.anchorMax = new Vector2(0, 0.5f); // Same anchor point
+            panelRect.pivot = new Vector2(0, 0.5f); // Pivot at left edge, vertical center
+            panelRect.anchoredPosition = new Vector2(10, -50); // 10px from left, slightly above center
+            panelRect.sizeDelta = new Vector2(350, 200); // Width x Height
 
             Image panelBg = panel.AddComponent<Image>();
             panelBg.color = new Color(0.1f, 0.1f, 0.15f, 0.85f);

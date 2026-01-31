@@ -349,8 +349,7 @@ namespace PlunkAndPlunder.Resolution
                         int movementCapacity = unit.GetMovementCapacity();
                         int movementRemaining = movementCapacity - movementUsed;
 
-                        // Update unit position and movement
-                        unit.position = destination;
+                        // Update unit's movement remaining (position will be updated by animation)
                         unit.movementRemaining = movementRemaining;
 
                         // Store remaining path in the unit for next turn
