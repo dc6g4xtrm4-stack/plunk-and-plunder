@@ -571,6 +571,14 @@ namespace PlunkAndPlunder.UI
                 return;
             }
 
+            // Show visual indicator on the harbor tile where shipyard will be deployed
+            if (pathVisualizer != null)
+            {
+                // Create a single-point path to highlight the deployment location
+                List<HexCoord> deploymentIndicator = new List<HexCoord> { selectedUnit.position, selectedUnit.position };
+                pathVisualizer.AddPath(selectedUnit.id, deploymentIndicator, isPrimary: true);
+            }
+
             // Create deploy shipyard order
             DeployShipyardOrder order = new DeployShipyardOrder(selectedUnit.id, 0, selectedUnit.position);
             pendingPlayerOrders.Add(order);
@@ -614,12 +622,15 @@ namespace PlunkAndPlunder.UI
                 return;
             }
 
-            // Create build ship order
-            BuildShipOrder order = new BuildShipOrder(0, selectedStructure.id, selectedStructure.position);
-            pendingPlayerOrders.Add(order);
+            // Immediately add to build queue for instant visual feedback
+            BuildQueueItem queueItem = new BuildQueueItem("Ship", BuildingConfig.SHIP_BUILD_TIME, BuildingConfig.BUILD_SHIP_COST);
+            selectedStructure.buildQueue.Add(queueItem);
 
-            int queuePosition = selectedStructure.buildQueue.Count + 1;
-            Debug.Log($"[GameHUD] Build ship order queued at {selectedStructure.id} (position {queuePosition})");
+            // Deduct gold immediately
+            player.gold -= BuildingConfig.BUILD_SHIP_COST;
+
+            int queuePosition = selectedStructure.buildQueue.Count;
+            Debug.Log($"[GameHUD] Ship added to build queue at {selectedStructure.id} (position {queuePosition}). Player gold: {player.gold}");
 
             // Keep the shipyard selected and refresh the display
             SelectStructure(selectedStructure);

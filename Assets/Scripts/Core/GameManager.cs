@@ -727,6 +727,21 @@ namespace PlunkAndPlunder.Core
                 }
             }
 
+            // Award salvage gold for destroyed ships (50% of build cost = 25g for basic ships)
+            const int SALVAGE_VALUE = 25; // 50% of 50g build cost
+            if (combatEvent.defenderDestroyed && attacker != null)
+            {
+                // Attacker destroyed defender - award salvage to attacker's owner
+                state.playerManager.GetPlayer(attacker.ownerId).gold += SALVAGE_VALUE;
+                Debug.Log($"[GameManager] Player {attacker.ownerId} earned {SALVAGE_VALUE}g salvage from destroying {defender?.id ?? combatEvent.defenderId}");
+            }
+            else if (combatEvent.attackerDestroyed && defender != null)
+            {
+                // Defender destroyed attacker - award salvage to defender's owner
+                state.playerManager.GetPlayer(defender.ownerId).gold += SALVAGE_VALUE;
+                Debug.Log($"[GameManager] Player {defender.ownerId} earned {SALVAGE_VALUE}g salvage from destroying {attacker?.id ?? combatEvent.attackerId}");
+            }
+
             // If either unit is destroyed, clear the combat tracking
             if (combatEvent.attackerDestroyed || combatEvent.defenderDestroyed)
             {

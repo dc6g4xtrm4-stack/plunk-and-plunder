@@ -17,9 +17,9 @@ namespace PlunkAndPlunder.Resolution
         private bool isAnimating = false;
         private bool isPaused = false;
 
-        public float hexStepDelay = 0.25f; // Time to move one hex
-        public float combatPauseDelay = 0.5f; // Time to pause for combat
-        public float eventPauseDelay = 0.3f; // Time to pause for other events
+        public float hexStepDelay = 0.5f; // Time to move one hex (increased for visibility)
+        public float combatPauseDelay = 1.0f; // Time to pause for combat
+        public float eventPauseDelay = 0.5f; // Time to pause for other events
 
         public event Action<GameState> OnAnimationStep; // Fired after each animation step
         public event Action OnAnimationComplete; // Fired when all animations done
@@ -74,6 +74,7 @@ namespace PlunkAndPlunder.Resolution
 
             Debug.Log($"[TurnAnimator] ===== STARTING ANIMATION PHASE =====");
             Debug.Log($"[TurnAnimator] Starting animation of {events.Count} events");
+            Debug.Log($"[TurnAnimator] Timing: hexStepDelay={hexStepDelay}s, combatPauseDelay={combatPauseDelay}s, eventPauseDelay={eventPauseDelay}s");
 
             // Separate movement events from other events
             List<UnitMovedEvent> moveEvents = new List<UnitMovedEvent>();
@@ -96,7 +97,13 @@ namespace PlunkAndPlunder.Resolution
             // Animate all movements simultaneously (step-by-step)
             if (moveEvents.Count > 0)
             {
+                Debug.Log($"[TurnAnimator] >>> BEGINNING MOVEMENT ANIMATION <<<");
                 yield return AnimateSimultaneousMovement(moveEvents, state);
+                Debug.Log($"[TurnAnimator] >>> MOVEMENT ANIMATION COMPLETE <<<");
+            }
+            else
+            {
+                Debug.Log($"[TurnAnimator] No movement events to animate");
             }
 
             // Then animate other events sequentially

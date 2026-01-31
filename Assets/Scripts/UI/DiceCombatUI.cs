@@ -371,20 +371,21 @@ namespace PlunkAndPlunder.UI
         private string GetDiceDots(int value)
         {
             // Return traditional dice dot patterns using filled circles (●)
+            // Using precise spacing for clean alignment
             switch (value)
             {
                 case 1:
-                    return "\n  ●\n";
+                    return "\n\n    ●";
                 case 2:
-                    return "●\n\n    ●";
+                    return "●\n\n        ●";
                 case 3:
-                    return "●\n  ●\n    ●";
+                    return "●\n    ●\n        ●";
                 case 4:
-                    return "●   ●\n\n●   ●";
+                    return "●       ●\n\n●       ●";
                 case 5:
-                    return "●   ●\n  ●\n●   ●";
+                    return "●       ●\n    ●\n●       ●";
                 case 6:
-                    return "●   ●\n●   ●\n●   ●";
+                    return "●       ●\n●       ●\n●       ●";
                 default:
                     return "?";
             }
@@ -445,17 +446,38 @@ namespace PlunkAndPlunder.UI
                 // Remove collider - we don't want it to interfere with mouse clicks
                 Destroy(combatIndicator.GetComponent<Collider>());
 
-                // Create pulsing red material
+                // Create pulsing red material - use existing material from primitive and modify it
                 Renderer renderer = combatIndicator.GetComponent<Renderer>();
-                Material mat = new Material(Shader.Find("Standard"));
-                mat.color = new Color(1f, 0f, 0f, 0.6f);
-                mat.SetFloat("_Mode", 3); // Transparent rendering mode
-                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                mat.SetInt("_ZWrite", 0);
-                mat.DisableKeyword("_ALPHATEST_ON");
-                mat.EnableKeyword("_ALPHABLEND_ON");
-                mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+
+                // Try to find a suitable shader, with fallbacks
+                Shader shader = Shader.Find("Standard");
+                if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null) shader = Shader.Find("Unlit/Color");
+                if (shader == null)
+                {
+                    // Last resort: just use the existing material and modify its color
+                    Material existingMat = renderer.material;
+                    existingMat.color = new Color(1f, 0f, 1f, 0.6f); // Purple/magenta for visibility
+                    return;
+                }
+
+                Material mat = new Material(shader);
+                mat.color = new Color(1f, 0f, 1f, 0.6f); // Purple/magenta for visibility
+
+                // Try to set transparency if the shader supports it
+                if (mat.HasProperty("_Mode"))
+                {
+                    mat.SetFloat("_Mode", 3); // Transparent rendering mode
+                }
+                if (mat.HasProperty("_SrcBlend") && mat.HasProperty("_DstBlend"))
+                {
+                    mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                    mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                }
+                if (mat.HasProperty("_ZWrite"))
+                {
+                    mat.SetInt("_ZWrite", 0);
+                }
                 mat.renderQueue = 3000;
                 renderer.material = mat;
 
