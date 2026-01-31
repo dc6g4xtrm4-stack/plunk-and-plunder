@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using PlunkAndPlunder.Combat;
+using PlunkAndPlunder.Construction;
 using PlunkAndPlunder.Core;
 using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Orders;
@@ -49,8 +50,24 @@ namespace PlunkAndPlunder.Resolution
             // Reset movement for all units at start of turn
             ResetAllUnitMovement();
 
-            // Process build queues at start of turn
-            events.AddRange(ProcessBuildQueues());
+            // Process build queues at start of turn (NEW CONSTRUCTION SYSTEM)
+            if (ConstructionManager.Instance != null)
+            {
+                events.AddRange(ConstructionManager.Instance.ProcessTurn(turnNumber));
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] Processed construction with new ConstructionManager");
+                }
+            }
+            else
+            {
+                // Fallback to old system if ConstructionManager not available
+                events.AddRange(ProcessBuildQueues());
+                if (enableLogging)
+                {
+                    Debug.LogWarning($"[TurnResolver] Using legacy build queue processing (ConstructionManager not found)");
+                }
+            }
 
             // Sort orders by type priority and then by unit ID for determinism
             // Priority: DeployShipyard > BuildShip > RepairShip > UpgradeShip > UpgradeSails > UpgradeCannons > UpgradeMaxLife > Move

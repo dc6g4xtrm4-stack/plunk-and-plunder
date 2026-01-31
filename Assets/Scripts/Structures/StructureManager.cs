@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PlunkAndPlunder.Construction;
 using PlunkAndPlunder.Map;
 
 namespace PlunkAndPlunder.Structures
@@ -16,6 +17,13 @@ namespace PlunkAndPlunder.Structures
             string id = $"structure_{nextStructureId++}";
             Structure structure = new Structure(id, ownerId, position, type);
             structures[id] = structure;
+
+            // Register shipyards with ConstructionManager
+            if (type == StructureType.SHIPYARD && ConstructionManager.Instance != null)
+            {
+                ConstructionManager.Instance.RegisterShipyard(id);
+            }
+
             return structure;
         }
 

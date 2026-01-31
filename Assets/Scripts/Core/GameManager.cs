@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using PlunkAndPlunder.AI;
+using PlunkAndPlunder.Construction;
 using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Networking;
 using PlunkAndPlunder.Orders;
@@ -73,6 +74,14 @@ namespace PlunkAndPlunder.Core
             // Initialize file logging
             GameLogger.Initialize();
 
+            // Initialize ConstructionManager (singleton)
+            if (ConstructionManager.Instance == null)
+            {
+                GameObject constructionManagerObj = new GameObject("ConstructionManager");
+                constructionManagerObj.AddComponent<ConstructionManager>();
+                Debug.Log("[GameManager] Created ConstructionManager");
+            }
+
             Debug.Log("[GameManager] Initialized");
         }
 
@@ -85,6 +94,12 @@ namespace PlunkAndPlunder.Core
             state.playerManager = new PlayerManager();
             state.unitManager = new UnitManager();
             state.structureManager = new StructureManager();
+
+            // Reset ConstructionManager
+            if (ConstructionManager.Instance != null)
+            {
+                ConstructionManager.Instance.Reset();
+            }
 
             // Setup players
             state.playerManager.AddPlayer("Player 1", PlayerType.Human);
@@ -252,6 +267,13 @@ namespace PlunkAndPlunder.Core
                     // Convert the harbor to a shipyard by changing its type and owner
                     harbor.type = StructureType.SHIPYARD;
                     harbor.ownerId = player.id;
+
+                    // Register with ConstructionManager
+                    if (ConstructionManager.Instance != null)
+                    {
+                        ConstructionManager.Instance.RegisterShipyard(harbor.id);
+                    }
+
                     shipyardsPlaced++;
 
                     Debug.Log($"[GameManager]   Shipyard structure {harbor.id} created at {shipyardCoord} (converted from harbour)");
