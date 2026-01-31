@@ -947,8 +947,8 @@ namespace PlunkAndPlunder.Core
     [Serializable]
     public class GameConfig
     {
-        public int numSeaTiles = 500;
-        public int numIslands = 25;
+        public int numSeaTiles = 1500; // Tripled from 500 for much more sea area
+        public int numIslands = 40; // Increased from 25 for proportional coverage
         public int minIslandSize = 4;
         public int maxIslandSize = 8;
     }
