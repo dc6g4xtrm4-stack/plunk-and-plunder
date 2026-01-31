@@ -206,15 +206,41 @@ namespace PlunkAndPlunder.Resolution
             List<CollisionInfo> detectedCollisions = new List<CollisionInfo>();
             HashSet<string> alreadyInCollision = new HashSet<string>();
 
-            // Type 1: Same destination collisions
+            // Type 1: Same destination collisions (ONLY for enemy units)
             foreach (var kvp in destinationMap)
             {
                 HexCoord destination = kvp.Key;
                 List<string> unitIds = kvp.Value;
 
-                // Collision detected: multiple units trying to move to same hex
+                // Check if multiple units are moving to same hex
                 if (unitIds.Count > 1)
                 {
+                    // Group units by owner
+                    Dictionary<int, List<string>> unitsByOwner = new Dictionary<int, List<string>>();
+                    foreach (string unitId in unitIds)
+                    {
+                        Unit unit = unitManager.GetUnit(unitId);
+                        if (unit != null)
+                        {
+                            if (!unitsByOwner.ContainsKey(unit.ownerId))
+                            {
+                                unitsByOwner[unit.ownerId] = new List<string>();
+                            }
+                            unitsByOwner[unit.ownerId].Add(unitId);
+                        }
+                    }
+
+                    // If all units belong to same player, NO collision - friendly stacking is allowed
+                    if (unitsByOwner.Count == 1)
+                    {
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] {unitIds.Count} friendly units moving to {destination} - allowing stacking");
+                        }
+                        continue; // Skip this, no collision for friendly units
+                    }
+
+                    // ENEMY units detected - create collision
                     CollisionInfo collision = new CollisionInfo(unitIds, destination);
 
                     // Store paths for each unit involved in collision
@@ -236,7 +262,7 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] Same-destination collision at {destination}: {unitIds.Count} units");
+                        Debug.Log($"[TurnResolver] ENEMY collision at {destination}: {unitIds.Count} units from {unitsByOwner.Count} different players");
                     }
                 }
             }
