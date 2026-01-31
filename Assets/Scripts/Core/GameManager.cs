@@ -93,11 +93,13 @@ namespace PlunkAndPlunder.Core
                 state.playerManager.AddPlayer($"AI {i}", PlayerType.AI);
             }
 
-            // Generate map
+            // Generate map with player start islands
             int seed = debugMapSeed != 0 ? debugMapSeed : UnityEngine.Random.Range(0, int.MaxValue);
             state.mapSeed = seed;
             MapGenerator mapGen = new MapGenerator(seed);
-            state.grid = mapGen.GenerateMap(config.numSeaTiles, config.numIslands, config.minIslandSize, config.maxIslandSize);
+            state.grid = mapGen.GenerateMap(config.numSeaTiles, config.numIslands, config.minIslandSize, config.maxIslandSize, numPlayers);
+
+            Debug.Log($"[GameManager] Map generated with {state.grid.playerStartIslands.Count} player start islands");
 
             // Initialize systems
             pathfinding = new Pathfinding(state.grid);
@@ -172,77 +174,79 @@ namespace PlunkAndPlunder.Core
 
         private void PlaceStartingUnits()
         {
-            // Place 2 starting ships near each player's shipyard
+            Debug.Log($"[GameManager] ===== PLACING STARTING UNITS (3 ships per player) =====");
+
+            // Place 3 starting ships for each player using their start island spawn positions
             for (int i = 0; i < state.playerManager.players.Count; i++)
             {
                 Player player = state.playerManager.players[i];
 
-                // Find this player's shipyard
-                List<Structure> playerShipyards = state.structureManager.GetStructuresForPlayer(player.id)
-                    .FindAll(s => s.type == StructureType.SHIPYARD);
-
-                if (playerShipyards.Count > 0)
+                if (i >= state.grid.playerStartIslands.Count)
                 {
-                    HexCoord shipyardPos = playerShipyards[0].position;
-
-                    // Find adjacent sea tiles to place ships
-                    List<HexCoord> adjacentTiles = new List<HexCoord>(shipyardPos.GetNeighbors());
-                    List<HexCoord> validStartPositions = new List<HexCoord>();
-
-                    foreach (HexCoord neighbor in adjacentTiles)
-                    {
-                        Tile tile = state.grid.GetTile(neighbor);
-                        if (tile != null && tile.type == TileType.SEA)
-                        {
-                            validStartPositions.Add(neighbor);
-                        }
-                    }
-
-                    // Place 2 ships on adjacent sea tiles
-                    int shipsPlaced = 0;
-                    for (int j = 0; j < 2 && j < validStartPositions.Count; j++)
-                    {
-                        state.unitManager.CreateUnit(player.id, validStartPositions[j], UnitType.SHIP);
-                        shipsPlaced++;
-                    }
-
-                    Debug.Log($"[GameManager] Player {player.id} starts with {shipsPlaced} ships near shipyard at {shipyardPos}");
+                    Debug.LogError($"[GameManager] No start island found for player {player.id}");
+                    continue;
                 }
+
+                PlayerStartIsland startIsland = state.grid.playerStartIslands[i];
+
+                Debug.Log($"[GameManager] Player {player.id} ({player.name}) start island has {startIsland.shipSpawnPositions.Count} spawn positions");
+
+                // Place 3 ships at the designated spawn positions
+                int shipsToPlace = Mathf.Min(3, startIsland.shipSpawnPositions.Count);
+                for (int j = 0; j < shipsToPlace; j++)
+                {
+                    HexCoord spawnPos = startIsland.shipSpawnPositions[j];
+                    Unit ship = state.unitManager.CreateUnit(player.id, spawnPos, UnitType.SHIP);
+                    Debug.Log($"[GameManager]   Ship {ship.id} spawned at {spawnPos}");
+                }
+
+                Debug.Log($"[GameManager] Player {player.id} starts with {shipsToPlace} ships near shipyard at {startIsland.shipyardPosition}");
             }
 
-            Debug.Log($"[GameManager] Placed {state.unitManager.units.Count} starting units");
+            Debug.Log($"[GameManager] Placed {state.unitManager.units.Count} total starting units");
         }
 
         private void PlaceHarbors()
         {
+            Debug.Log($"[GameManager] ===== PLACING HARBOUR STRUCTURES =====");
+
             // Harbors are already part of the map as HARBOR tiles
-            // Create structures for each harbor (initially neutral)
+            // Create neutral harbor structures for ALL harbours on the map (including player start islands)
             List<Tile> harborTiles = state.grid.GetTilesOfType(TileType.HARBOR);
 
             foreach (Tile harborTile in harborTiles)
             {
+                // Create neutral harbour structure (will be converted to shipyard for player start harbours)
                 state.structureManager.CreateStructure(-1, harborTile.coord, StructureType.HARBOR);
             }
 
-            Debug.Log($"[GameManager] Placed {harborTiles.Count} harbors");
+            Debug.Log($"[GameManager] Placed {harborTiles.Count} neutral harbour structures");
         }
 
         private void PlaceStartingShipyards()
         {
-            List<Tile> harborTiles = state.grid.GetTilesOfType(TileType.HARBOR);
-            System.Random rng = new System.Random(state.mapSeed + 1); // Different seed for shipyard placement
-
-            // Shuffle harbors for random assignment
-            harborTiles = harborTiles.OrderBy(t => rng.Next()).ToList();
+            Debug.Log($"[GameManager] ===== PLACING STARTING SHIPYARDS (using player start islands) =====");
 
             int shipyardsPlaced = 0;
-            for (int i = 0; i < state.playerManager.players.Count && i < harborTiles.Count; i++)
+
+            // Use player start islands to place shipyards
+            for (int i = 0; i < state.playerManager.players.Count; i++)
             {
                 Player player = state.playerManager.players[i];
-                HexCoord harborCoord = harborTiles[i].coord;
 
-                // Get the existing harbor structure and CONVERT it to a shipyard
-                Structure harbor = state.structureManager.GetStructureAtPosition(harborCoord);
+                if (i >= state.grid.playerStartIslands.Count)
+                {
+                    Debug.LogError($"[GameManager] No start island found for player {player.id}");
+                    continue;
+                }
+
+                PlayerStartIsland startIsland = state.grid.playerStartIslands[i];
+                HexCoord shipyardCoord = startIsland.shipyardPosition;
+
+                Debug.Log($"[GameManager] Player {player.id} ({player.name}) start island: {startIsland.landTiles.Count} land, {startIsland.harbourTiles.Count} harbours, shipyard at {shipyardCoord}");
+
+                // Get the existing harbor structure at the shipyard position and CONVERT it to a shipyard
+                Structure harbor = state.structureManager.GetStructureAtPosition(shipyardCoord);
                 if (harbor != null && harbor.type == StructureType.HARBOR)
                 {
                     // Convert the harbor to a shipyard by changing its type and owner
@@ -250,15 +254,15 @@ namespace PlunkAndPlunder.Core
                     harbor.ownerId = player.id;
                     shipyardsPlaced++;
 
-                    Debug.Log($"[GameManager] Player {player.id} ({player.name}) starts with shipyard at {harborCoord} (converted from harbor structure {harbor.id})");
+                    Debug.Log($"[GameManager]   Shipyard structure {harbor.id} created at {shipyardCoord} (converted from harbour)");
                 }
                 else
                 {
-                    Debug.LogWarning($"[GameManager] Could not find harbor structure at {harborCoord} for player {player.id}");
+                    Debug.LogWarning($"[GameManager] Could not find harbor structure at {shipyardCoord} for player {player.id}");
                 }
             }
 
-            Debug.Log($"[GameManager] Placed {shipyardsPlaced} starting shipyards (converted from harbors)");
+            Debug.Log($"[GameManager] Placed {shipyardsPlaced} starting shipyards on player start islands");
         }
 
         public void ChangePhase(GamePhase newPhase)

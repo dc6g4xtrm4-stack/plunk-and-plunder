@@ -8,6 +8,7 @@ namespace PlunkAndPlunder.Map
     {
         public Dictionary<HexCoord, Tile> tiles = new Dictionary<HexCoord, Tile>();
         public float hexSize = 1f;
+        public List<PlayerStartIsland> playerStartIslands = new List<PlayerStartIsland>(); // Player starting islands
 
         public void AddTile(Tile tile)
         {
