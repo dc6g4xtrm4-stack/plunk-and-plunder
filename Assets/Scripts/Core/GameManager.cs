@@ -757,15 +757,25 @@ namespace PlunkAndPlunder.Core
                 return;
             }
 
-            // If auto-resolving, skip UI and auto-continue after a brief delay
-            if (isAutoResolving)
+            // Check if human player is involved in combat
+            bool humanInvolved = (attacker != null && attacker.ownerId == 0) || (defender != null && defender.ownerId == 0);
+
+            // If auto-resolving OR no human involved, skip UI and auto-continue
+            if (isAutoResolving || !humanInvolved)
             {
-                Debug.Log("[GameManager] Auto-resolve: skipping combat UI, auto-continuing");
+                if (!humanInvolved)
+                {
+                    Debug.Log($"[GameManager] AI vs AI combat: {attacker?.id ?? "?"} (P{attacker?.ownerId}) vs {defender?.id ?? "?"} (P{defender?.ownerId}) - skipping UI");
+                }
+                else
+                {
+                    Debug.Log("[GameManager] Auto-resolve: skipping combat UI, auto-continuing");
+                }
                 StartCoroutine(AutoContinueCombat());
             }
             else
             {
-                // Show dice combat UI
+                // Show dice combat UI (human player involved)
                 if (diceCombatUI != null)
                 {
                     diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue, state.playerManager);
