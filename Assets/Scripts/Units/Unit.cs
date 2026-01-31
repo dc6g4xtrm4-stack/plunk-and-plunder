@@ -9,6 +9,7 @@ namespace PlunkAndPlunder.Units
     public class Unit
     {
         public string id;
+        public string name; // Ship name for display (e.g., "Theodore", "Sailfast")
         public int ownerId;
         public HexCoord position;
         public UnitType type;
@@ -26,6 +27,29 @@ namespace PlunkAndPlunder.Units
         public bool isInCombat;
         public string combatOpponentId;
 
+        // Ship name lists for random generation
+        private static readonly string[] SHIP_NAMES = new string[]
+        {
+            "Theodore", "Sailfast", "Rusty", "Stanley", "Poseidon", "Neptune",
+            "Kraken", "Leviathan", "Tempest", "Hurricane", "Typhoon", "Cyclone",
+            "Seawolf", "Barracuda", "Hammerhead", "Mako", "Tigershark", "Orca",
+            "Revenge", "Victory", "Glory", "Valor", "Pride", "Honor",
+            "Thunder", "Lightning", "Storm", "Gale", "Squall", "Tornado",
+            "Phantom", "Shadow", "Ghost", "Specter", "Wraith", "Banshee",
+            "Cutlass", "Scimitar", "Rapier", "Sabre", "Blade", "Dagger",
+            "Falcon", "Hawk", "Eagle", "Raven", "Crow", "Vulture",
+            "Serpent", "Dragon", "Wyvern", "Drake", "Hydra", "Basilisk",
+            "Fortune", "Destiny", "Fate", "Chance", "Luck", "Providence",
+            "Marauder", "Corsair", "Buccaneer", "Privateer", "Raider", "Reaver",
+            "Black Pearl", "Flying Dutchman", "Queen Anne", "Golden Hind", "Jolly Roger",
+            "Sea Dog", "Salt Spray", "Wave Rider", "Tide Turner", "Wind Chaser",
+            "Iron Maiden", "Steel Heart", "Copper Crown", "Silver Sword", "Gold Gull",
+            "Davy Jones", "Captain Morgan", "Red Beard", "Blackbeard", "Bluebeard",
+            "Stormbringer", "Wavecutter", "Seafarer", "Ocean Rider", "Deep Diver"
+        };
+
+        private static System.Random nameRandom = new System.Random();
+
         public Unit(string id, int ownerId, HexCoord position, UnitType type)
         {
             this.id = id;
@@ -40,6 +64,34 @@ namespace PlunkAndPlunder.Units
             this.cannons = 0; // Base ships have no cannon upgrades
             this.isInCombat = false;
             this.combatOpponentId = null;
+
+            // Generate a random ship name
+            this.name = GenerateShipName();
+        }
+
+        /// <summary>
+        /// Generate a random ship name from the predefined list
+        /// </summary>
+        private static string GenerateShipName()
+        {
+            return SHIP_NAMES[nameRandom.Next(SHIP_NAMES.Length)];
+        }
+
+        /// <summary>
+        /// Get the full display name with owner information
+        /// e.g., "Theodore (Player 1)" or "Sailfast (AI #2)"
+        /// </summary>
+        public string GetDisplayName(Players.PlayerManager playerManager = null)
+        {
+            if (playerManager != null)
+            {
+                Players.Player owner = playerManager.GetPlayer(ownerId);
+                if (owner != null)
+                {
+                    return $"{name} ({owner.name})";
+                }
+            }
+            return $"{name} (Player {ownerId})";
         }
 
         /// <summary>

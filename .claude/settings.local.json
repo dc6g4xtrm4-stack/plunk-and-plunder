@@ -20,7 +20,8 @@
       "Bash(\"C:\\\\Program Files\\\\Unity\\\\Hub\\\\Editor\\\\6000.0.32f1\\\\Editor\\\\Unity.exe\" -quit -batchmode -projectPath . -executeMethod Builder.BuildGame -logFile compile_log.txt)",
       "Bash(echo:*)",
       "Bash(timeout 60 \"C:/Program Files/Unity/Hub/Editor/6000.3.5f2/Editor/Unity.exe\":*)",
-      "Bash(timeout 60:*)"
+      "Bash(timeout 60:*)",
+      "Bash(\"/c/Program Files/Unity/Hub/Editor/2022.3.28f1/Editor/Unity.exe\" -quit -batchmode -projectPath . -executeMethod UnityEditor.Build.BuildPipeline.BuildPlayer -logFile build.log)"
     ]
   }
 }

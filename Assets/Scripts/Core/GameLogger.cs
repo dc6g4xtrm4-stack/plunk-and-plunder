@@ -96,23 +96,44 @@ namespace PlunkAndPlunder.Core
             Log($"[Unit {unitId} (Player {ownerId})] {action}");
         }
 
-        public static void LogCombat(string attackerId, string defenderId, int damageToAttacker, int damageToDefender, List<int> attackerRolls, List<int> defenderRolls)
+        public static void LogCombat(string attackerName, string defenderName, HexCoord location, int damageToAttacker, int damageToDefender, List<int> attackerRolls, List<int> defenderRolls, string context = "")
         {
-            Log($"COMBAT: {attackerId} vs {defenderId}");
-            Log($"  Attacker rolls: [{string.Join(", ", attackerRolls)}] = {SumList(attackerRolls)}");
-            Log($"  Defender rolls: [{string.Join(", ", defenderRolls)}] = {SumList(defenderRolls)}");
-            Log($"  Damage: Attacker -{damageToAttacker} HP, Defender -{damageToDefender} HP");
+            string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+            string contextStr = string.IsNullOrEmpty(context) ? "" : $" ({context})";
+            Log($"COMBAT{contextStr}: {attackerName} vs {defenderName} at tile {tileId}");
+            Log($"  {attackerName} rolls: [{string.Join(", ", attackerRolls)}] = {SumList(attackerRolls)}");
+            Log($"  {defenderName} rolls: [{string.Join(", ", defenderRolls)}] = {SumList(defenderRolls)}");
+            Log($"  Damage: {attackerName} -{damageToAttacker} HP, {defenderName} -{damageToDefender} HP");
         }
 
-        public static void LogCollision(List<string> unitIds, HexCoord destination)
+        public static void LogCollision(List<string> shipNames, HexCoord destination, string collisionType)
         {
-            Log($"COLLISION at {destination}: Units [{string.Join(", ", unitIds)}]");
+            string tileId = $"#{Math.Abs(destination.GetHashCode()) % 10000}";
+            if (shipNames.Count == 2)
+            {
+                if (collisionType == "ENTERING")
+                {
+                    Log($"COLLISION: {shipNames[0]} and {shipNames[1]} contest tile {tileId}");
+                }
+                else if (collisionType == "PASSING")
+                {
+                    Log($"COLLISION: {shipNames[0]} and {shipNames[1]} trade fire while crossing near tile {tileId}");
+                }
+                else
+                {
+                    Log($"COLLISION at tile {tileId}: {shipNames[0]} vs {shipNames[1]}");
+                }
+            }
+            else
+            {
+                Log($"COLLISION at tile {tileId}: {string.Join(", ", shipNames)}");
+            }
         }
 
-        public static void LogYieldDecision(string unitId, bool yielding)
+        public static void LogYieldDecision(string shipName, bool yielding)
         {
             string decision = yielding ? "PROCEED (yield)" : "ATTACK";
-            Log($"  Unit {unitId} chose: {decision}");
+            Log($"  {shipName} chose: {decision}");
         }
 
         public static void LogGameState(GameState state)

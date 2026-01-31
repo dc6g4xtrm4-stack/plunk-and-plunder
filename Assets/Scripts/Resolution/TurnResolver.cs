@@ -274,7 +274,29 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] ENTERING COLLISION at {destination}: {unitIds.Count} enemy units from {unitsByOwner.Count} different players attempting to enter same tile");
+                        // Get ship names for narrative logging
+                        List<string> shipNames = new List<string>();
+                        foreach (string unitId in unitIds)
+                        {
+                            Unit u = unitManager.GetUnit(unitId);
+                            if (u != null)
+                            {
+                                shipNames.Add(u.GetDisplayName(playerManager));
+                            }
+                        }
+
+                        string tileId = $"#{Math.Abs(destination.GetHashCode()) % 10000}";
+                        if (shipNames.Count == 2)
+                        {
+                            Debug.Log($"[TurnResolver] ENTERING COLLISION: {shipNames[0]} and {shipNames[1]} contest tile {tileId}");
+                        }
+                        else
+                        {
+                            Debug.Log($"[TurnResolver] ENTERING COLLISION at tile {tileId}: {string.Join(", ", shipNames)}");
+                        }
+
+                        // Log to file
+                        GameLogger.LogCollision(shipNames, destination, "ENTERING");
                     }
                 }
             }
@@ -354,7 +376,17 @@ namespace PlunkAndPlunder.Resolution
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] PASSING COLLISION: {order1.unitId} ({unit1Start}->{unit1End}) and {order2.unitId} ({unit2Start}->{unit2End}) attempting to swap positions");
+                            // Get ship names for narrative logging
+                            string ship1Name = unit1.GetDisplayName(playerManager);
+                            string ship2Name = unit2.GetDisplayName(playerManager);
+                            string tile1Id = $"#{Math.Abs(unit1Start.GetHashCode()) % 10000}";
+                            string tile2Id = $"#{Math.Abs(unit1End.GetHashCode()) % 10000}";
+
+                            Debug.Log($"[TurnResolver] PASSING COLLISION: {ship1Name} and {ship2Name} trade fire while crossing between tiles {tile1Id} and {tile2Id}");
+
+                            // Log to file
+                            List<string> shipNames = new List<string> { ship1Name, ship2Name };
+                            GameLogger.LogCollision(shipNames, collisionLocation, "PASSING");
                         }
                     }
                 }
@@ -401,9 +433,14 @@ namespace PlunkAndPlunder.Resolution
                         // Create move event with partial movement info
                         bool isPartial = remaining != null && remaining.Count > 1;
 
+                        // Get ship name for narrative logging
+                        string shipName = unit.GetDisplayName(playerManager);
+                        string fromTileId = $"#{Math.Abs(from.GetHashCode()) % 10000}";
+                        string toTileId = $"#{Math.Abs(destination.GetHashCode()) % 10000}";
+
                         // Debug: Log path details
                         string pathDebug = thisTurnPath != null ? $"[{string.Join(", ", thisTurnPath)}]" : "null";
-                        Debug.Log($"[TurnResolver] Creating UnitMovedEvent for {unitId}: from={from}, to={destination}, path={pathDebug}, pathCount={thisTurnPath?.Count ?? 0}");
+                        Debug.Log($"[TurnResolver] Creating UnitMovedEvent for {shipName}: from tile {fromTileId} to tile {toTileId}, pathCount={thisTurnPath?.Count ?? 0}");
 
                         events.Add(new UnitMovedEvent(
                             turnNumber, unitId, from, destination, thisTurnPath,
@@ -414,11 +451,11 @@ namespace PlunkAndPlunder.Resolution
                         {
                             if (isPartial)
                             {
-                                Debug.Log($"[TurnResolver] Unit {unitId} moved {movementUsed}/{movementCapacity} tiles (partial move, {remaining.Count - 1} tiles remain)");
+                                Debug.Log($"[TurnResolver] {shipName} moved {movementUsed}/{movementCapacity} tiles (partial move, {remaining.Count - 1} tiles remain)");
                             }
                             else
                             {
-                                Debug.Log($"[TurnResolver] Unit {unitId} moved from {from} to {destination} ({movementUsed} tiles)");
+                                Debug.Log($"[TurnResolver] {shipName} moved from tile {fromTileId} to tile {toTileId} ({movementUsed} tiles)");
                             }
                         }
                     }
@@ -469,9 +506,26 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] ===== RESOLVING COLLISION at {collision.destination} =====");
-                    Debug.Log($"[TurnResolver]   Yielding units: {yieldingUnits.Count} - [{string.Join(", ", yieldingUnits)}]");
-                    Debug.Log($"[TurnResolver]   Attacking units: {notYieldingUnits.Count} - [{string.Join(", ", notYieldingUnits)}]");
+                    string tileId = $"#{Math.Abs(collision.destination.GetHashCode()) % 10000}";
+
+                    // Get ship names for yielding and attacking units
+                    List<string> yieldingNames = new List<string>();
+                    foreach (string unitId in yieldingUnits)
+                    {
+                        Unit u = unitManager.GetUnit(unitId);
+                        if (u != null) yieldingNames.Add(u.GetDisplayName(playerManager));
+                    }
+
+                    List<string> attackingNames = new List<string>();
+                    foreach (string unitId in notYieldingUnits)
+                    {
+                        Unit u = unitManager.GetUnit(unitId);
+                        if (u != null) attackingNames.Add(u.GetDisplayName(playerManager));
+                    }
+
+                    Debug.Log($"[TurnResolver] ===== RESOLVING COLLISION at tile {tileId} =====");
+                    Debug.Log($"[TurnResolver]   Yielding: {string.Join(", ", yieldingNames)}");
+                    Debug.Log($"[TurnResolver]   Attacking: {string.Join(", ", attackingNames)}");
                 }
 
                 // Case 1: All units yield (all choose PROCEED in PASSING, or all choose YIELD in ENTERING)
@@ -500,14 +554,18 @@ namespace PlunkAndPlunder.Resolution
                     if (notYieldingUnits.Count == 1)
                     {
                         string movingUnitId = notYieldingUnits[0];
+                        Unit movingUnit = unitManager.GetUnit(movingUnitId);
+                        string movingUnitName = movingUnit != null ? movingUnit.GetDisplayName(playerManager) : movingUnitId;
+
                         ExecuteUnitMove(movingUnitId, collision, events);
 
                         events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination,
-                            $"Unit {movingUnitId} claimed the tile, others yielded"));
+                            $"{movingUnitName} claimed the tile, others yielded"));
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] RESOLUTION: Unit {movingUnitId} gets the tile, others yielded");
+                            string tileId = $"#{Math.Abs(collision.destination.GetHashCode()) % 10000}";
+                            Debug.Log($"[TurnResolver] RESOLUTION: {movingUnitName} claims tile {tileId}, others yielded");
                         }
                     }
                     // Multiple units not yielding - they all want the tile, so they fight
@@ -550,7 +608,22 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] CONTESTED TILE: No units yielded - fighting ONE round, staying in position");
+                        // Get ship names for contested tile logging
+                        List<string> contestingNames = new List<string>();
+                        foreach (Unit u in combatUnits)
+                        {
+                            contestingNames.Add(u.GetDisplayName(playerManager));
+                        }
+
+                        string tileId = $"#{Math.Abs(collision.destination.GetHashCode()) % 10000}";
+                        if (contestingNames.Count == 2)
+                        {
+                            Debug.Log($"[TurnResolver] CONTESTED TILE: {contestingNames[0]} and {contestingNames[1]} refuse to yield at tile {tileId} - fighting ONE round");
+                        }
+                        else
+                        {
+                            Debug.Log($"[TurnResolver] CONTESTED TILE: {string.Join(", ", contestingNames)} all attack at tile {tileId} - fighting ONE round");
+                        }
                     }
 
                     // Trigger ONE ROUND of combat between enemy ships
@@ -621,7 +694,10 @@ namespace PlunkAndPlunder.Resolution
 
             if (enableLogging)
             {
-                Debug.Log($"[TurnResolver] Unit {unitId} moved from {from} to {destination}");
+                string shipName = unit.GetDisplayName(playerManager);
+                string fromTileId = $"#{Math.Abs(from.GetHashCode()) % 10000}";
+                string toTileId = $"#{Math.Abs(destination.GetHashCode()) % 10000}";
+                Debug.Log($"[TurnResolver] {shipName} moved from tile {fromTileId} to tile {toTileId}");
             }
         }
 
@@ -673,12 +749,24 @@ namespace PlunkAndPlunder.Resolution
                 defenderDestroyed
             ));
 
-            // Log combat to file
-            GameLogger.LogCombat(unit1.id, unit2.id, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls);
+            // Get ship display names for narrative logging
+            string unit1Name = unit1.GetDisplayName(playerManager);
+            string unit2Name = unit2.GetDisplayName(playerManager);
+
+            // Determine context based on combat situation
+            string context = "adjacent ships";
+            if (unit1.isInCombat && unit2.isInCombat)
+            {
+                context = "ongoing multi-turn combat";
+            }
+
+            // Log combat to file with narrative description
+            GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls, context);
 
             if (enableLogging)
             {
-                Debug.Log($"[TurnResolver] One round of combat: {unit1.id} ({unit1.health}HP) vs {unit2.id} ({unit2.health}HP)");
+                string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+                Debug.Log($"[TurnResolver] {unit1Name} attacks {unit2Name} at tile {tileId}: {unit1.health}HP vs {unit2.health}HP");
             }
 
             // Create destruction events (units will be removed by TurnAnimator)
@@ -689,7 +777,8 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] {unit1.id} destroyed");
+                    string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+                    Debug.Log($"[TurnResolver] {unit1Name} destroyed at tile {tileId}");
                 }
             }
 
@@ -700,7 +789,8 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] {unit2.id} destroyed");
+                    string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+                    Debug.Log($"[TurnResolver] {unit2Name} destroyed at tile {tileId}");
                 }
             }
 
@@ -744,9 +834,17 @@ namespace PlunkAndPlunder.Resolution
 
             if (enableLogging)
             {
-                Debug.Log($"[TurnResolver] ===== COMBAT TO THE DEATH at {location} =====");
+                // Get ship names for combat logging
+                List<string> shipNames = new List<string>();
+                foreach (Unit u in units)
+                {
+                    shipNames.Add(u.GetDisplayName(playerManager));
+                }
+
+                string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+                Debug.Log($"[TurnResolver] ===== COMBAT TO THE DEATH at tile {tileId} =====");
                 Debug.Log($"[TurnResolver] RULE ENFORCEMENT: Enemy ships CANNOT occupy same tile - must fight until one is destroyed");
-                Debug.Log($"[TurnResolver] {units.Count} enemy units from {unitsByPlayer.Count} different players");
+                Debug.Log($"[TurnResolver] Ships: {string.Join(", ", shipNames)} from {unitsByPlayer.Count} different players");
             }
 
             // Combat between different players - fight to the death!
@@ -797,9 +895,14 @@ namespace PlunkAndPlunder.Resolution
             int roundNumber = 1;
             const int MAX_ROUNDS = 50; // Safety limit to prevent infinite loops
 
+            // Get ship display names for narrative logging
+            string unit1Name = unit1.GetDisplayName(playerManager);
+            string unit2Name = unit2.GetDisplayName(playerManager);
+            string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
+
             if (enableLogging)
             {
-                Debug.Log($"[TurnResolver] Combat to the death: {unit1.id} ({unit1.health}HP) vs {unit2.id} ({unit2.health}HP)");
+                Debug.Log($"[TurnResolver] {unit1Name} and {unit2Name} battle to the death at tile {tileId}");
             }
 
             // Keep fighting until one dies
@@ -828,12 +931,12 @@ namespace PlunkAndPlunder.Resolution
                     defenderDestroyed
                 ));
 
-                // Log combat to file
-                GameLogger.LogCombat(unit1.id, unit2.id, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls);
+                // Log combat to file with narrative description
+                GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls, $"battle to the death - round {roundNumber}");
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Round {roundNumber}: {unit1.id} ({unit1.health}HP) vs {unit2.id} ({unit2.health}HP) - Damage: {result.damageToAttacker} to attacker, {result.damageToDefender} to defender");
+                    Debug.Log($"[TurnResolver] Round {roundNumber}: {unit1Name} ({unit1.health}HP) vs {unit2Name} ({unit2.health}HP) - Damage: {result.damageToAttacker} to {unit1Name}, {result.damageToDefender} to {unit2Name}");
                 }
 
                 roundNumber++;
@@ -847,7 +950,7 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] {unit1.id} destroyed after {roundNumber - 1} rounds");
+                    Debug.Log($"[TurnResolver] {unit1Name} destroyed after {roundNumber - 1} rounds at tile {tileId}");
                 }
             }
 
@@ -858,7 +961,7 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] {unit2.id} destroyed after {roundNumber - 1} rounds");
+                    Debug.Log($"[TurnResolver] {unit2Name} destroyed after {roundNumber - 1} rounds at tile {tileId}");
                 }
             }
 
@@ -902,7 +1005,11 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging && distance <= 2)
                     {
-                        Debug.Log($"[TurnResolver] Units {unitA.id} (Player {unitA.ownerId}) at {unitA.position} and {unitB.id} (Player {unitB.ownerId}) at {unitB.position} are distance {distance} apart");
+                        string shipAName = unitA.GetDisplayName(playerManager);
+                        string shipBName = unitB.GetDisplayName(playerManager);
+                        string tileAId = $"#{Math.Abs(unitA.position.GetHashCode()) % 10000}";
+                        string tileBId = $"#{Math.Abs(unitB.position.GetHashCode()) % 10000}";
+                        Debug.Log($"[TurnResolver] {shipAName} at tile {tileAId} and {shipBName} at tile {tileBId} are distance {distance} apart");
                     }
 
                     if (distance == 1)
@@ -910,7 +1017,9 @@ namespace PlunkAndPlunder.Resolution
                         // Resolve ONE ROUND of combat (multi-turn combat system)
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] Adjacent combat triggered: {unitA.id} vs {unitB.id}");
+                            string shipAName = unitA.GetDisplayName(playerManager);
+                            string shipBName = unitB.GetDisplayName(playerManager);
+                            Debug.Log($"[TurnResolver] Adjacent combat triggered: {shipAName} vs {shipBName}");
                         }
 
                         // Use location as midpoint for the combat event
