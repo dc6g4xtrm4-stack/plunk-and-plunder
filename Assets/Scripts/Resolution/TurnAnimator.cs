@@ -184,8 +184,9 @@ namespace PlunkAndPlunder.Resolution
                 if (moveEvent.path != null && moveEvent.path.Count > 1)
                 {
                     unitPaths[moveEvent.unitId] = moveEvent.path;
-                    unitCurrentStep[moveEvent.unitId] = 0; // Start at index 0
+                    unitCurrentStep[moveEvent.unitId] = 1; // Start at index 1 (skip starting position at index 0)
                     maxPathLength = Mathf.Max(maxPathLength, moveEvent.path.Count);
+                    Debug.Log($"[TurnAnimator] Unit {moveEvent.unitId} has path with {moveEvent.path.Count} waypoints: [{string.Join(", ", moveEvent.path)}]");
                 }
             }
 

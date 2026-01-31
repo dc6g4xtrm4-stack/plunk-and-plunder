@@ -357,6 +357,11 @@ namespace PlunkAndPlunder.Resolution
 
                         // Create move event with partial movement info
                         bool isPartial = remaining != null && remaining.Count > 1;
+
+                        // Debug: Log path details
+                        string pathDebug = thisTurnPath != null ? $"[{string.Join(", ", thisTurnPath)}]" : "null";
+                        Debug.Log($"[TurnResolver] Creating UnitMovedEvent for {unitId}: from={from}, to={destination}, path={pathDebug}, pathCount={thisTurnPath?.Count ?? 0}");
+
                         events.Add(new UnitMovedEvent(
                             turnNumber, unitId, from, destination, thisTurnPath,
                             isPartial, remaining, movementUsed, movementRemaining
