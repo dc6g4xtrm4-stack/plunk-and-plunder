@@ -35,15 +35,15 @@ namespace PlunkAndPlunder.UI
                 rootRect = gameObject.AddComponent<RectTransform>();
             }
 
-            // Anchor to bottom-left corner to match the canvas
-            rootRect.anchorMin = new Vector2(0f, 0f);
-            rootRect.anchorMax = new Vector2(0f, 0f);
-            rootRect.pivot = new Vector2(0f, 0f);
+            // Anchor to bottom-center
+            rootRect.anchorMin = new Vector2(0.5f, 0f);
+            rootRect.anchorMax = new Vector2(0.5f, 0f);
+            rootRect.pivot = new Vector2(0.5f, 0f);
             rootRect.anchoredPosition = Vector2.zero;
             rootRect.sizeDelta = new Vector2(400f, 300f); // Large enough for content
 
             CreatePanel();
-            Debug.Log("[PlayerStatsHUD] Initialized - positioned at BOTTOM LEFT");
+            Debug.Log("[PlayerStatsHUD] Initialized - positioned at BOTTOM CENTER");
         }
 
         private void CreatePanel()
@@ -55,12 +55,12 @@ namespace PlunkAndPlunder.UI
 
             RectTransform panelRect = panel.AddComponent<RectTransform>();
 
-            // CRITICAL: Anchor to BOTTOM-LEFT corner (0, 0)
-            panelRect.anchorMin = new Vector2(0f, 0f);  // Bottom-left corner
-            panelRect.anchorMax = new Vector2(0f, 0f);  // Bottom-left corner
-            panelRect.pivot = new Vector2(0f, 0f);      // Pivot at bottom-left of panel itself
+            // CRITICAL: Anchor to BOTTOM-CENTER (0.5, 0)
+            panelRect.anchorMin = new Vector2(0.5f, 0f);  // Bottom-center
+            panelRect.anchorMax = new Vector2(0.5f, 0f);  // Bottom-center
+            panelRect.pivot = new Vector2(0.5f, 0f);      // Pivot at bottom-center of panel itself
 
-            // Position: Flush against left edge, 150px from bottom (to sit above any bottom UI)
+            // Position: Centered horizontally, 150px from bottom (to sit above any bottom UI)
             panelRect.anchoredPosition = new Vector2(0f, 150f);
 
             // Size: 350px wide, 200px tall (dynamic height adjusted later)

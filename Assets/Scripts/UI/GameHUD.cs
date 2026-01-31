@@ -79,6 +79,11 @@ namespace PlunkAndPlunder.UI
             phaseText = CreateText("Phase: Planning", 28, topBar.transform);
             phaseText.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 0);
 
+            // Player info text (gold and orders count) - top right
+            playerInfoText = CreateText("Gold: 0 | Orders: 0", 24, topBar.transform);
+            playerInfoText.GetComponent<RectTransform>().anchoredPosition = new Vector2(600, 0);
+            playerInfoText.alignment = TextAnchor.MiddleRight;
+
             // Submit button - positioned below top bar
             submitButton = CreateButton("Submit Orders", new Vector2(750, 420), OnSubmitClicked);
             submitButton.transform.SetParent(transform, false);
@@ -92,16 +97,6 @@ namespace PlunkAndPlunder.UI
             // Auto-resolve button (debug) - positioned below top bar
             autoResolveButton = CreateButton("Auto-Resolve (Debug)", new Vector2(520, 420), OnAutoResolveClicked);
             autoResolveButton.transform.SetParent(transform, false);
-
-            // Player stats panel (left side, above unit panel)
-            GameObject playerStatsPanel = CreatePanel(new Vector2(-800, 400), new Vector2(300, 100), new Color(0.1f, 0.1f, 0.1f, 0.8f));
-            playerStatsPanel.transform.SetParent(transform, false);
-
-            // Player info text (gold and orders count)
-            playerInfoText = CreateText("Gold: 0 | Orders: 0", 20, playerStatsPanel.transform);
-            playerInfoText.alignment = TextAnchor.MiddleLeft;
-            playerInfoText.GetComponent<RectTransform>().anchoredPosition = new Vector2(-140, 0);
-            playerInfoText.GetComponent<RectTransform>().sizeDelta = new Vector2(280, 80);
 
             // Selected unit panel
             GameObject unitPanel = CreatePanel(new Vector2(-800, -300), new Vector2(300, 250), new Color(0.1f, 0.1f, 0.1f, 0.8f));
