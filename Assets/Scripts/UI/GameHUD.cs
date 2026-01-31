@@ -634,38 +634,57 @@ namespace PlunkAndPlunder.UI
             if (selectedStructure.type != StructureType.SHIPYARD || selectedStructure.ownerId != 0)
                 return;
 
-            GameState state = GameManager.Instance.state;
-            var player = state.playerManager.GetPlayer(0);
-
-            // Check if build queue is full
-            if (selectedStructure.buildQueue.Count >= BuildingConfig.MAX_QUEUE_SIZE)
+            // NEW SYSTEM: Delegate to ConstructionManager
+            if (PlunkAndPlunder.Construction.ConstructionManager.Instance != null)
             {
-                Debug.LogWarning($"[GameHUD] Build queue is full ({BuildingConfig.MAX_QUEUE_SIZE}/{BuildingConfig.MAX_QUEUE_SIZE})");
-                selectedUnitText.text += $"\n\nQueue is full!";
-                return;
-            }
+                var result = PlunkAndPlunder.Construction.ConstructionManager.Instance.QueueShip(
+                    playerId: 0, // Human player
+                    shipyardId: selectedStructure.id
+                );
 
-            // Check if player has enough gold
-            if (player == null || player.gold < BuildingConfig.BUILD_SHIP_COST)
+                if (result.success)
+                {
+                    Debug.Log($"[GameHUD] Successfully queued ship at {selectedStructure.id}, job {result.jobId}");
+
+                    // Refresh display
+                    SelectStructure(selectedStructure);
+                    selectedUnitText.text += $"\n\nShip queued!";
+                }
+                else
+                {
+                    // Show error message
+                    Debug.LogWarning($"[GameHUD] Failed to queue ship: {result.reason}");
+                    selectedUnitText.text += $"\n\n{result.reason}";
+                }
+            }
+            else
             {
-                Debug.LogWarning($"[GameHUD] Not enough gold to build ship. Need {BuildingConfig.BUILD_SHIP_COST}, have {player?.gold ?? 0}");
-                selectedUnitText.text += $"\n\nNeed {BuildingConfig.BUILD_SHIP_COST} gold!";
-                return;
+                // FALLBACK: Old system (should not happen in normal gameplay)
+                Debug.LogWarning("[GameHUD] ConstructionManager not available, using legacy system");
+
+                GameState state = GameManager.Instance.state;
+                var player = state.playerManager.GetPlayer(0);
+
+                // Legacy validation and queue manipulation
+                if (selectedStructure.buildQueue.Count >= BuildingConfig.MAX_QUEUE_SIZE)
+                {
+                    selectedUnitText.text += $"\n\nQueue is full!";
+                    return;
+                }
+
+                if (player == null || player.gold < BuildingConfig.BUILD_SHIP_COST)
+                {
+                    selectedUnitText.text += $"\n\nNeed {BuildingConfig.BUILD_SHIP_COST} gold!";
+                    return;
+                }
+
+                BuildQueueItem queueItem = new BuildQueueItem("Ship", BuildingConfig.SHIP_BUILD_TIME, BuildingConfig.BUILD_SHIP_COST);
+                selectedStructure.buildQueue.Add(queueItem);
+                player.gold -= BuildingConfig.BUILD_SHIP_COST;
+
+                SelectStructure(selectedStructure);
+                selectedUnitText.text += $"\n\nShip queued!";
             }
-
-            // Immediately add to build queue for instant visual feedback
-            BuildQueueItem queueItem = new BuildQueueItem("Ship", BuildingConfig.SHIP_BUILD_TIME, BuildingConfig.BUILD_SHIP_COST);
-            selectedStructure.buildQueue.Add(queueItem);
-
-            // Deduct gold immediately
-            player.gold -= BuildingConfig.BUILD_SHIP_COST;
-
-            int queuePosition = selectedStructure.buildQueue.Count;
-            Debug.Log($"[GameHUD] Ship added to build queue at {selectedStructure.id} (position {queuePosition}). Player gold: {player.gold}");
-
-            // Keep the shipyard selected and refresh the display
-            SelectStructure(selectedStructure);
-            selectedUnitText.text += $"\n\nShip queued! ({queuePosition}/{BuildingConfig.MAX_QUEUE_SIZE})";
         }
 
         private void OnUpgradeSailsClicked()

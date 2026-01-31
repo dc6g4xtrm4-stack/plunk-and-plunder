@@ -1113,6 +1113,38 @@ namespace PlunkAndPlunder.Resolution
 
             foreach (DeployShipyardOrder order in orders)
             {
+                // NEW SYSTEM: Use ConstructionManager for deployment
+                if (ConstructionManager.Instance != null)
+                {
+                    var result = ConstructionManager.Instance.DeployShipyard(
+                        order.playerId,
+                        order.unitId,
+                        order.position
+                    );
+
+                    if (result.success)
+                    {
+                        // Create event for successful deployment
+                        events.Add(new GameEvent(turnNumber, GameEventType.ShipyardDeployed,
+                            $"Player {order.playerId} deployed shipyard at {order.position}"));
+
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] Player {order.playerId} deployed shipyard at {order.position} (NEW SYSTEM)");
+                        }
+                    }
+                    else
+                    {
+                        if (enableLogging)
+                        {
+                            Debug.LogWarning($"[TurnResolver] Failed to deploy shipyard: {result.reason}");
+                        }
+                    }
+
+                    continue; // Skip legacy code below
+                }
+
+                // LEGACY FALLBACK: Old deployment system
                 Unit ship = unitManager.GetUnit(order.unitId);
                 if (ship == null)
                 {

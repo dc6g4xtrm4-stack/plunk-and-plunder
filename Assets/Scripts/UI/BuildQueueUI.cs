@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using PlunkAndPlunder.Construction;
 using PlunkAndPlunder.Structures;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +11,7 @@ namespace PlunkAndPlunder.UI
         private GameObject queuePanel;
         private List<GameObject> queueSlots = new List<GameObject>();
         private Structure currentShipyard;
+        private string currentShipyardId;
 
         public void Initialize()
         {
@@ -99,6 +101,7 @@ namespace PlunkAndPlunder.UI
             }
 
             currentShipyard = shipyard;
+            currentShipyardId = shipyard.id;
             queuePanel.SetActive(true);
             UpdateQueueDisplay();
         }
@@ -106,6 +109,7 @@ namespace PlunkAndPlunder.UI
         public void HideQueue()
         {
             currentShipyard = null;
+            currentShipyardId = null;
             if (queuePanel != null)
             {
                 queuePanel.SetActive(false);
@@ -114,32 +118,53 @@ namespace PlunkAndPlunder.UI
 
         public void UpdateQueueDisplay()
         {
-            if (currentShipyard == null || queuePanel == null || !queuePanel.activeSelf)
+            if (currentShipyardId == null || queuePanel == null || !queuePanel.activeSelf)
                 return;
 
-            List<BuildQueueItem> queue = currentShipyard.buildQueue;
+            // NEW SYSTEM: Read from ConstructionManager
+            List<ConstructionJob> jobs = new List<ConstructionJob>();
 
+            if (ConstructionManager.Instance != null)
+            {
+                jobs = ConstructionManager.Instance.GetShipyardQueue(currentShipyardId);
+            }
+            else if (currentShipyard != null)
+            {
+                // FALLBACK: Use legacy buildQueue
+                foreach (var item in currentShipyard.buildQueue)
+                {
+                    jobs.Add(new ConstructionJob
+                    {
+                        itemType = item.itemType,
+                        turnsRemaining = item.turnsRemaining,
+                        turnsTotal = BuildingConfig.SHIP_BUILD_TIME,
+                        status = jobs.Count == 0 ? ConstructionStatus.Building : ConstructionStatus.Queued
+                    });
+                }
+            }
+
+            // Display jobs
             for (int i = 0; i < queueSlots.Count; i++)
             {
                 GameObject slot = queueSlots[i];
                 Text slotText = slot.GetComponentInChildren<Text>();
 
-                if (i < queue.Count)
+                if (i < jobs.Count)
                 {
-                    BuildQueueItem item = queue[i];
-                    int turnsComplete = BuildingConfig.SHIP_BUILD_TIME - item.turnsRemaining;
-                    string progressText = $"{turnsComplete}/{BuildingConfig.SHIP_BUILD_TIME}";
+                    ConstructionJob job = jobs[i];
+                    int turnsComplete = job.turnsTotal - job.turnsRemaining;
+                    string progressText = $"{turnsComplete}/{job.turnsTotal}";
 
-                    if (i == 0)
+                    if (job.status == ConstructionStatus.Building)
                     {
                         // First slot shows actively building item
-                        slotText.text = $"  Building: {item.itemType} ({progressText})";
+                        slotText.text = $"  ⚙ Building: {job.itemType} ({progressText})";
                         slot.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 0.8f); // Green tint
                     }
                     else
                     {
                         // Other slots show queued items
-                        slotText.text = $"  Queued: {item.itemType} (0/3)";
+                        slotText.text = $"  ⏳ Queued: {job.itemType} (0/{job.turnsTotal})";
                         slot.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.2f, 0.8f); // Yellow tint
                     }
                 }
@@ -155,7 +180,7 @@ namespace PlunkAndPlunder.UI
         private void Update()
         {
             // Update display if queue is visible
-            if (currentShipyard != null && queuePanel != null && queuePanel.activeSelf)
+            if (currentShipyardId != null && queuePanel != null && queuePanel.activeSelf)
             {
                 UpdateQueueDisplay();
             }
