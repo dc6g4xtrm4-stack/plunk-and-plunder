@@ -498,6 +498,18 @@ namespace PlunkAndPlunder.UI
             {
                 plannedPath = path;
 
+                // Check if this unit was in combat and clear combat flags
+                bool wasCombatUnit = selectedUnit.isInCombat;
+                if (wasCombatUnit)
+                {
+                    Debug.Log($"[GameHUD] Unit {selectedUnit.id} was in combat - clearing combat flags and overriding combat path");
+                    selectedUnit.isInCombat = false;
+                    selectedUnit.combatOpponentId = null;
+                }
+
+                // Clear any queued path from previous turn (especially combat paths)
+                selectedUnit.queuedPath = null;
+
                 // Remove existing move order for this unit if any
                 pendingPlayerOrders.RemoveAll(o => o is MoveOrder moveOrder && moveOrder.unitId == selectedUnit.id);
 
@@ -511,7 +523,7 @@ namespace PlunkAndPlunder.UI
                 // Store the path for this unit
                 pendingMovePaths[selectedUnit.id] = path;
 
-                Debug.Log($"[GameHUD] Planned path for {selectedUnit.id}: {path.Count} steps");
+                Debug.Log($"[GameHUD] Planned {(wasCombatUnit ? "NEW" : "")} path for {selectedUnit.id}: {path.Count} steps (replacing {(wasCombatUnit ? "combat" : "previous")} path)");
                 selectedUnitText.text += "\n\nMove order queued!";
 
                 // Update selection indicator to OrderSet state
@@ -574,13 +586,17 @@ namespace PlunkAndPlunder.UI
             // Show visual indicator on the harbor tile where shipyard will be deployed
             // NOTE: This creates a visible path visualization showing the user where the shipyard will be built
             // The visualization remains visible until orders are submitted
+            List<HexCoord> deploymentIndicator = new List<HexCoord> { selectedUnit.position, selectedUnit.position };
+
+            // CRITICAL: Add deployment to pendingMovePaths so it persists through UpdatePathVisualizations
+            pendingMovePaths[selectedUnit.id] = deploymentIndicator;
+
             if (pathVisualizer != null)
             {
                 // Create a single-point path to highlight the deployment location
                 // The path starts and ends at the same position, which PathVisualizer renders as a highlight
-                List<HexCoord> deploymentIndicator = new List<HexCoord> { selectedUnit.position, selectedUnit.position };
                 pathVisualizer.AddPath(selectedUnit.id, deploymentIndicator, isPrimary: true, movementCapacity: 0);
-                Debug.Log($"[GameHUD] VISUALIZATION: Showing DEPLOYMENT indicator for shipyard at {selectedUnit.position}");
+                Debug.Log($"[GameHUD] VISUALIZATION: Showing DEPLOYMENT indicator for shipyard at {selectedUnit.position} (added to pendingMovePaths)");
             }
 
             // Create deploy shipyard order
@@ -844,6 +860,7 @@ namespace PlunkAndPlunder.UI
         /// <summary>
         /// Restore remaining paths from units that had incomplete movement last turn
         /// This makes the previously "dotted" segments become "solid" for the new turn
+        /// CRITICAL: Combat paths should remain as default orders unless player overrides them
         /// </summary>
         private void RestoreRemainingPaths()
         {
@@ -856,12 +873,16 @@ namespace PlunkAndPlunder.UI
             List<Unit> humanUnits = state.unitManager.GetAllUnits().FindAll(u => u.ownerId == 0);
 
             int restoredCount = 0;
+            int combatPathsRestored = 0;
 
             foreach (Unit unit in humanUnits)
             {
                 // Check if this unit has a queued path from the previous turn
                 if (unit.queuedPath != null && unit.queuedPath.Count > 1)
                 {
+                    // Check if this is a combat path (unit is in combat)
+                    bool isCombatPath = unit.isInCombat && unit.combatOpponentId != null;
+
                     // Automatically queue a move order with the remaining path
                     MoveOrder order = new MoveOrder(unit.id, 0, unit.queuedPath);
                     pendingPlayerOrders.Add(order);
@@ -874,16 +895,28 @@ namespace PlunkAndPlunder.UI
 
                     restoredCount++;
 
-                    Debug.Log($"[GameHUD] Restored queued path for unit {unit.id}: {unit.queuedPath.Count - 1} tiles");
+                    if (isCombatPath)
+                    {
+                        combatPathsRestored++;
+                        Debug.Log($"[GameHUD] Restored COMBAT path for unit {unit.id} -> opponent at {unit.queuedPath[unit.queuedPath.Count - 1]} (path length: {unit.queuedPath.Count - 1})");
+                    }
+                    else
+                    {
+                        Debug.Log($"[GameHUD] Restored MOVEMENT path for unit {unit.id}: {unit.queuedPath.Count - 1} tiles");
+                    }
 
-                    // Clear the queued path from the unit (it's now in pending orders)
-                    unit.queuedPath = null;
+                    // IMPORTANT: DO NOT clear unit.queuedPath here!
+                    // Keep it so that if the player doesn't submit orders, the combat continues
+                    // Only clear it when the player explicitly changes orders or submits
+                    // unit.queuedPath = null; // REMOVED - this was causing combat paths to disappear!
                 }
             }
 
             if (restoredCount > 0)
             {
-                Debug.Log($"[GameHUD] Restored {restoredCount} queued paths from previous turn");
+                Debug.Log($"[GameHUD] ===== RESTORED {restoredCount} PATHS =====");
+                Debug.Log($"[GameHUD]   Combat paths: {combatPathsRestored}");
+                Debug.Log($"[GameHUD]   Movement paths: {restoredCount - combatPathsRestored}");
 
                 // Update visualizations to show restored paths
                 if (pathVisualizer != null)
@@ -916,14 +949,18 @@ namespace PlunkAndPlunder.UI
             // Don't clear all paths - PathVisualizer.AddPath() handles per-unit clearing
             // Clearing all would remove paths we're about to re-add
 
-            // Add all pending move paths (includes movement, combat paths, attack shipyard paths)
+            // Add all pending move paths (includes movement, combat paths, attack shipyard paths, deployment indicators)
             int pathsAdded = 0;
+            int combatPathsAdded = 0;
+            int deploymentPathsAdded = 0;
+            int movementPathsAdded = 0;
+
             foreach (var kvp in pendingMovePaths)
             {
                 string unitId = kvp.Key;
                 List<HexCoord> path = kvp.Value;
 
-                // Get the unit to determine its movement capacity
+                // Get the unit to determine its movement capacity and combat status
                 Unit unit = state.unitManager.GetUnit(unitId);
                 if (unit == null)
                 {
@@ -932,6 +969,11 @@ namespace PlunkAndPlunder.UI
                 }
 
                 int movementCapacity = unit.GetMovementCapacity();
+
+                // Determine path type for logging
+                bool isCombatPath = unit.isInCombat && unit.combatOpponentId != null;
+                bool isDeploymentPath = (path.Count == 2 && path[0].Equals(path[1])); // Deployment indicator
+                string pathType = isCombatPath ? "COMBAT" : (isDeploymentPath ? "DEPLOYMENT" : "MOVEMENT");
 
                 // Determine if this is the primary path (currently selected unit)
                 bool isPrimary = (selectedUnit != null && selectedUnit.id == unitId);
@@ -942,7 +984,11 @@ namespace PlunkAndPlunder.UI
                     pathVisualizer.AddPath(unitId, path, isPrimary, movementCapacity);
                     pathsAdded++;
 
-                    Debug.Log($"[GameHUD] Added path for {unitId}: {path.Count} waypoints, {(isPrimary ? "PRIMARY" : "secondary")}, capacity={movementCapacity}");
+                    if (isCombatPath) combatPathsAdded++;
+                    else if (isDeploymentPath) deploymentPathsAdded++;
+                    else movementPathsAdded++;
+
+                    Debug.Log($"[GameHUD] Added {pathType} path for {unitId}: {path.Count} waypoints, {(isPrimary ? "PRIMARY" : "secondary")}, capacity={movementCapacity}");
                 }
                 catch (System.Exception ex)
                 {
@@ -956,7 +1002,10 @@ namespace PlunkAndPlunder.UI
                 }
             }
 
-            Debug.Log($"[GameHUD] Updated path visualizations: {pathsAdded}/{pendingMovePaths.Count} paths added, primary={selectedUnit?.id ?? "none"}");
+            Debug.Log($"[GameHUD] ===== PATH VISUALIZATION UPDATE =====");
+            Debug.Log($"[GameHUD]   Total paths: {pathsAdded}/{pendingMovePaths.Count}");
+            Debug.Log($"[GameHUD]   Combat: {combatPathsAdded}, Movement: {movementPathsAdded}, Deployment: {deploymentPathsAdded}");
+            Debug.Log($"[GameHUD]   Primary unit: {selectedUnit?.id ?? "none"}");
         }
 
         /// <summary>
