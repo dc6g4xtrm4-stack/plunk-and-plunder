@@ -10,6 +10,7 @@ namespace PlunkAndPlunder.UI
 {
     /// <summary>
     /// Displays all player statistics (gold, ships, shipyards)
+    /// Positioned at BOTTOM LEFT of screen, layered on top of other UI elements
     /// </summary>
     public class PlayerStatsHUD : MonoBehaviour
     {
@@ -28,26 +29,39 @@ namespace PlunkAndPlunder.UI
         public void Initialize()
         {
             CreatePanel();
-            Debug.Log("[PlayerStatsHUD] Initialized");
+            Debug.Log("[PlayerStatsHUD] Initialized - positioned at BOTTOM LEFT");
         }
 
         private void CreatePanel()
         {
-            // Create panel on BOTTOM LEFT of screen, positioned above the selection window
+            // FULL REFACTOR: Position at BOTTOM LEFT corner of screen
+            // Anchored to bottom-left with proper layering
             panel = new GameObject("PlayerStatsPanel");
             panel.transform.SetParent(transform, false);
 
             RectTransform panelRect = panel.AddComponent<RectTransform>();
-            panelRect.anchorMin = new Vector2(0, 0); // Anchor to bottom left corner
-            panelRect.anchorMax = new Vector2(0, 0); // Same anchor point
-            panelRect.pivot = new Vector2(0, 0); // Pivot at bottom left
-            panelRect.anchoredPosition = new Vector2(10, 10); // 10px from left, 10px from bottom
-            panelRect.sizeDelta = new Vector2(350, 200); // Width x Height
 
+            // CRITICAL: Anchor to BOTTOM-LEFT corner (0, 0)
+            panelRect.anchorMin = new Vector2(0f, 0f);  // Bottom-left corner
+            panelRect.anchorMax = new Vector2(0f, 0f);  // Bottom-left corner
+            panelRect.pivot = new Vector2(0f, 0f);      // Pivot at bottom-left of panel itself
+
+            // Position: 10px from left edge, 150px from bottom (to sit above any bottom UI)
+            panelRect.anchoredPosition = new Vector2(10f, 150f);
+
+            // Size: 350px wide, 200px tall (dynamic height adjusted later)
+            panelRect.sizeDelta = new Vector2(350f, 200f);
+
+            // Semi-transparent dark background
             Image panelBg = panel.AddComponent<Image>();
-            panelBg.color = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            panelBg.color = new Color(0.1f, 0.1f, 0.15f, 0.9f);  // Slightly more opaque for visibility
 
-            // Add title
+            // Add subtle border outline
+            Outline outline = panel.AddComponent<Outline>();
+            outline.effectColor = new Color(1f, 0.8f, 0.2f, 0.8f);  // Gold outline
+            outline.effectDistance = new Vector2(2, -2);
+
+            // TITLE
             GameObject titleObj = new GameObject("Title");
             titleObj.transform.SetParent(panel.transform, false);
 
@@ -65,6 +79,8 @@ namespace PlunkAndPlunder.UI
             titleRect.pivot = new Vector2(0.5f, 1);
             titleRect.anchoredPosition = new Vector2(0, -10);
             titleRect.sizeDelta = new Vector2(-20, 30);
+
+            Debug.Log($"[PlayerStatsHUD] Panel created at bottom-left: anchoredPosition={panelRect.anchoredPosition}, sizeDelta={panelRect.sizeDelta}");
         }
 
         public void UpdateStats(GameState state)
@@ -108,6 +124,8 @@ namespace PlunkAndPlunder.UI
             RectTransform panelRect = panel.GetComponent<RectTransform>();
             float totalHeight = 50 + (players.Count * rowHeight) + 10; // Title + rows + padding
             panelRect.sizeDelta = new Vector2(350, totalHeight);
+
+            Debug.Log($"[PlayerStatsHUD] Updated stats for {players.Count} players, panel height={totalHeight}");
         }
 
         private PlayerStatRow CreatePlayerRow(Player player, int shipCount, int shipyardCount, float yOffset)
@@ -128,7 +146,7 @@ namespace PlunkAndPlunder.UI
             // Player name color based on ID
             Color playerColor = GetPlayerColor(player.id);
 
-            // Player name
+            // Player name (30% width)
             GameObject nameObj = new GameObject("Name");
             nameObj.transform.SetParent(row.rowObject.transform, false);
             row.playerNameText = nameObj.AddComponent<Text>();
@@ -145,11 +163,11 @@ namespace PlunkAndPlunder.UI
             nameRect.offsetMin = Vector2.zero;
             nameRect.offsetMax = Vector2.zero;
 
-            // Gold (Doubloons)
+            // Gold - Doubloons (20% width)
             GameObject goldObj = new GameObject("Gold");
             goldObj.transform.SetParent(row.rowObject.transform, false);
             row.goldText = goldObj.AddComponent<Text>();
-            row.goldText.text = $"💰 {player.gold}";
+            row.goldText.text = $"💰{player.gold}";
             row.goldText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             row.goldText.fontSize = 14;
             row.goldText.alignment = TextAnchor.MiddleCenter;
@@ -161,11 +179,11 @@ namespace PlunkAndPlunder.UI
             goldRect.offsetMin = Vector2.zero;
             goldRect.offsetMax = Vector2.zero;
 
-            // Ships
+            // Ships (20% width)
             GameObject shipsObj = new GameObject("Ships");
             shipsObj.transform.SetParent(row.rowObject.transform, false);
             row.shipsText = shipsObj.AddComponent<Text>();
-            row.shipsText.text = $"⛵ {shipCount}";
+            row.shipsText.text = $"⛵{shipCount}";
             row.shipsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             row.shipsText.fontSize = 14;
             row.shipsText.alignment = TextAnchor.MiddleCenter;
@@ -177,11 +195,11 @@ namespace PlunkAndPlunder.UI
             shipsRect.offsetMin = Vector2.zero;
             shipsRect.offsetMax = Vector2.zero;
 
-            // Shipyards
+            // Shipyards (30% width)
             GameObject shipyardsObj = new GameObject("Shipyards");
             shipyardsObj.transform.SetParent(row.rowObject.transform, false);
             row.shipyardsText = shipyardsObj.AddComponent<Text>();
-            row.shipyardsText.text = $"🏭 {shipyardCount}";
+            row.shipyardsText.text = $"🏭{shipyardCount}";
             row.shipyardsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             row.shipyardsText.fontSize = 14;
             row.shipyardsText.alignment = TextAnchor.MiddleCenter;
@@ -198,13 +216,13 @@ namespace PlunkAndPlunder.UI
 
         private Color GetPlayerColor(int playerId)
         {
-            // Different colors for each player
+            // Distinct colors for each player
             switch (playerId)
             {
                 case 0: return new Color(0.5f, 0.8f, 1f);    // Light blue
                 case 1: return new Color(1f, 0.5f, 0.5f);    // Light red
                 case 2: return new Color(0.5f, 1f, 0.5f);    // Light green
-                case 3: return new Color(1f, 1f, 0.5f);      // Light yellow
+                case 3: return new Color(1f, 1f, 0.5f);      // Yellow
                 default: return Color.white;
             }
         }
@@ -214,6 +232,7 @@ namespace PlunkAndPlunder.UI
             if (panel != null)
             {
                 panel.SetActive(true);
+                Debug.Log("[PlayerStatsHUD] Shown");
             }
         }
 
@@ -222,6 +241,7 @@ namespace PlunkAndPlunder.UI
             if (panel != null)
             {
                 panel.SetActive(false);
+                Debug.Log("[PlayerStatsHUD] Hidden");
             }
         }
     }
