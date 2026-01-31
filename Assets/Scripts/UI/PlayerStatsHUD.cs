@@ -28,6 +28,20 @@ namespace PlunkAndPlunder.UI
 
         public void Initialize()
         {
+            // Ensure the PlayerStatsHUD GameObject itself has proper RectTransform anchoring
+            RectTransform rootRect = gameObject.GetComponent<RectTransform>();
+            if (rootRect == null)
+            {
+                rootRect = gameObject.AddComponent<RectTransform>();
+            }
+
+            // Anchor to bottom-left corner to match the canvas
+            rootRect.anchorMin = new Vector2(0f, 0f);
+            rootRect.anchorMax = new Vector2(0f, 0f);
+            rootRect.pivot = new Vector2(0f, 0f);
+            rootRect.anchoredPosition = Vector2.zero;
+            rootRect.sizeDelta = new Vector2(400f, 300f); // Large enough for content
+
             CreatePanel();
             Debug.Log("[PlayerStatsHUD] Initialized - positioned at BOTTOM LEFT");
         }
