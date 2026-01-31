@@ -241,21 +241,24 @@ namespace PlunkAndPlunder.Core
                 Player player = state.playerManager.players[i];
                 HexCoord harborCoord = harborTiles[i].coord;
 
-                // Change the harbor ownership to the player
+                // Get the existing harbor structure and CONVERT it to a shipyard
                 Structure harbor = state.structureManager.GetStructureAtPosition(harborCoord);
-                if (harbor != null)
+                if (harbor != null && harbor.type == StructureType.HARBOR)
                 {
-                    state.structureManager.ChangeOwner(harbor.id, player.id);
+                    // Convert the harbor to a shipyard by changing its type and owner
+                    harbor.type = StructureType.SHIPYARD;
+                    harbor.ownerId = player.id;
+                    shipyardsPlaced++;
+
+                    Debug.Log($"[GameManager] Player {player.id} ({player.name}) starts with shipyard at {harborCoord} (converted from harbor structure {harbor.id})");
                 }
-
-                // Create a shipyard at this harbor for the player
-                state.structureManager.CreateStructure(player.id, harborCoord, StructureType.SHIPYARD);
-                shipyardsPlaced++;
-
-                Debug.Log($"[GameManager] Player {player.id} ({player.name}) starts with shipyard at {harborCoord}");
+                else
+                {
+                    Debug.LogWarning($"[GameManager] Could not find harbor structure at {harborCoord} for player {player.id}");
+                }
             }
 
-            Debug.Log($"[GameManager] Placed {shipyardsPlaced} starting shipyards");
+            Debug.Log($"[GameManager] Placed {shipyardsPlaced} starting shipyards (converted from harbors)");
         }
 
         public void ChangePhase(GamePhase newPhase)
@@ -319,6 +322,35 @@ namespace PlunkAndPlunder.Core
                 playerStatsHUD.UpdateStats(state);
             }
 
+            // COMBAT PATH QUEUE: Set default attack paths for units in ongoing combat
+            // When combat occurs, units should automatically continue attacking unless player changes orders
+            foreach (Unit unit in state.unitManager.GetAllUnits())
+            {
+                if (unit.isInCombat && unit.combatOpponentId != null)
+                {
+                    Unit opponent = state.unitManager.GetUnit(unit.combatOpponentId);
+                    if (opponent != null && opponent.isInCombat)
+                    {
+                        // Set queued path to continue attacking opponent
+                        // This creates a default path that shows the unit will continue combat
+                        List<HexCoord> attackPath = new List<HexCoord> { unit.position, opponent.position };
+                        unit.queuedPath = attackPath;
+
+                        Debug.Log($"[GameManager] Unit {unit.id} in ongoing combat with {opponent.id} - queued default attack path {unit.position} -> {opponent.position}");
+                        GameLogger.LogPlayerAction(unit.ownerId, $"Unit {unit.id} continues combat with {opponent.id} at {opponent.position}");
+                    }
+                    else
+                    {
+                        // Opponent destroyed or not in combat anymore - clear combat flags
+                        unit.isInCombat = false;
+                        unit.combatOpponentId = null;
+                        unit.queuedPath = null;
+
+                        Debug.Log($"[GameManager] Unit {unit.id} combat ended (opponent destroyed or withdrew)");
+                    }
+                }
+            }
+
             // Initialize player view on first turn
             if (state.turnNumber == 1)
             {
@@ -365,6 +397,9 @@ namespace PlunkAndPlunder.Core
                         break;
                     case UpgradeShipOrder upgradeOrder:
                         isValid = orderValidator.ValidateUpgradeShipOrder(upgradeOrder, out error);
+                        break;
+                    case AttackShipyardOrder attackOrder:
+                        isValid = orderValidator.ValidateAttackShipyardOrder(attackOrder, out error);
                         break;
                 }
 

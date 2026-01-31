@@ -85,6 +85,10 @@ namespace PlunkAndPlunder.Resolution
             List<UpgradeMaxLifeOrder> upgradeMaxLifeOrders = sortedOrders.OfType<UpgradeMaxLifeOrder>().ToList();
             events.AddRange(ResolveUpgradeMaxLifeOrders(upgradeMaxLifeOrders));
 
+            // Process attack shipyard orders
+            List<AttackShipyardOrder> attackShipyardOrders = sortedOrders.OfType<AttackShipyardOrder>().ToList();
+            events.AddRange(ResolveAttackShipyardOrders(attackShipyardOrders));
+
             // Process move orders
             List<MoveOrder> moveOrders = sortedOrders.OfType<MoveOrder>().ToList();
             events.AddRange(ResolveMoveOrders(moveOrders));
@@ -140,8 +144,10 @@ namespace PlunkAndPlunder.Resolution
                     return 5;
                 case OrderType.UpgradeMaxLife:
                     return 6;
+                case OrderType.AttackShipyard:
+                    return 7; // Process attacks before moves
                 case OrderType.Move:
-                    return 7;
+                    return 8;
                 default:
                     return 999;
             }
@@ -206,7 +212,12 @@ namespace PlunkAndPlunder.Resolution
             List<CollisionInfo> detectedCollisions = new List<CollisionInfo>();
             HashSet<string> alreadyInCollision = new HashSet<string>();
 
-            // Type 1: Same destination collisions (ONLY for enemy units)
+            // Type 1: ENTERING SAME TILE collision (multiple units moving to same destination)
+            // RULE: Two enemy ships can NEVER occupy the same tile
+            // When enemy ships attempt to ENTER the same tile, prompt each: YIELD or ATTACK
+            //   - If one yields, the other gets the tile
+            //   - If neither yields, they fight ONE round and stay in original positions (contested tile)
+            //   - Friendly units from same player CAN stack peacefully (no collision)
             foreach (var kvp in destinationMap)
             {
                 HexCoord destination = kvp.Key;
@@ -235,12 +246,13 @@ namespace PlunkAndPlunder.Resolution
                     {
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] {unitIds.Count} friendly units moving to {destination} - allowing stacking");
+                            Debug.Log($"[TurnResolver] {unitIds.Count} friendly units moving to {destination} - allowing peaceful stacking");
                         }
                         continue; // Skip this, no collision for friendly units
                     }
 
-                    // ENEMY units detected - create collision
+                    // ENEMY units detected trying to ENTER same tile - create collision
+                    // This triggers YIELD or ATTACK prompt
                     CollisionInfo collision = new CollisionInfo(unitIds, destination);
 
                     // Store paths for each unit involved in collision
@@ -262,12 +274,16 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] ENEMY collision at {destination}: {unitIds.Count} units from {unitsByOwner.Count} different players");
+                        Debug.Log($"[TurnResolver] ENTERING COLLISION at {destination}: {unitIds.Count} enemy units from {unitsByOwner.Count} different players attempting to enter same tile");
                     }
                 }
             }
 
-            // Type 2: Swapping positions collision (ships moving into each other)
+            // Type 2: PASSING collision (ships swapping positions - moving into each other)
+            // RULE: When two enemy ships are about to PASS each other (swap tiles), prompt each: PROCEED or ATTACK
+            //   - If both proceed (yield), they can swap positions peacefully
+            //   - If either attacks (doesn't yield), they fight ONE round and stay in original positions
+            //   - Friendly ships from same player CAN pass through each other freely (no collision)
             List<MoveOrder> moveOrdersList = moveOrders.ToList();
             for (int i = 0; i < moveOrdersList.Count; i++)
             {
@@ -287,8 +303,8 @@ namespace PlunkAndPlunder.Resolution
                     if (unit1 == null || unit2 == null)
                         continue;
 
-                    // Skip if same owner (friendly ships can pass through each other, no collision)
-                    // Friendly ships from the same player NEVER trigger combat or collision
+                    // Skip if same owner (friendly ships can pass through each other peacefully)
+                    // RULE: Friendly ships from the same player NEVER trigger combat or collision
                     if (unit1.ownerId == unit2.ownerId)
                         continue;
 
@@ -303,7 +319,8 @@ namespace PlunkAndPlunder.Resolution
                     // Check if they're swapping positions (A->B and B->A)
                     if (unit1End.Equals(unit2Start) && unit2End.Equals(unit1Start))
                     {
-                        // Ships are moving into each other's positions - create collision
+                        // Enemy ships are PASSING each other - create collision
+                        // This triggers PROCEED or ATTACK prompt
                         List<string> swapUnits = new List<string> { order1.unitId, order2.unitId };
 
                         // Use the midpoint or first ship's destination for collision location
@@ -337,7 +354,7 @@ namespace PlunkAndPlunder.Resolution
 
                         if (enableLogging)
                         {
-                            Debug.Log($"[TurnResolver] Swap collision: {order1.unitId} ({unit1Start}->{unit1End}) and {order2.unitId} ({unit2Start}->{unit2End})");
+                            Debug.Log($"[TurnResolver] PASSING COLLISION: {order1.unitId} ({unit1Start}->{unit1End}) and {order2.unitId} ({unit2Start}->{unit2End}) attempting to swap positions");
                         }
                     }
                 }
@@ -413,6 +430,19 @@ namespace PlunkAndPlunder.Resolution
 
         /// <summary>
         /// Resolve collisions based on yield decisions
+        ///
+        /// Collision types:
+        /// 1. ENTERING SAME TILE: Multiple ships trying to enter same destination
+        ///    - Prompt: YIELD or ATTACK
+        ///    - If one yields, other gets the tile
+        ///    - If neither yields, CONTESTED TILE: fight one round, stay in original positions
+        ///
+        /// 2. PASSING (swapping positions): Two ships trying to swap tiles
+        ///    - Prompt: PROCEED or ATTACK (proceed = yield, attack = don't yield)
+        ///    - If both proceed, they swap peacefully
+        ///    - If either attacks, fight one round, stay in original positions
+        ///
+        /// RULE: Two enemy ships can NEVER occupy the same tile. They must fight until one is destroyed or yields.
         /// </summary>
         public List<GameEvent> ResolveCollisionsWithYieldDecisions(List<CollisionInfo> collisions, Dictionary<string, bool> yieldDecisions)
         {
@@ -439,10 +469,13 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Resolving collision at {collision.destination}: {yieldingUnits.Count} yielding, {notYieldingUnits.Count} not yielding");
+                    Debug.Log($"[TurnResolver] ===== RESOLVING COLLISION at {collision.destination} =====");
+                    Debug.Log($"[TurnResolver]   Yielding units: {yieldingUnits.Count} - [{string.Join(", ", yieldingUnits)}]");
+                    Debug.Log($"[TurnResolver]   Attacking units: {notYieldingUnits.Count} - [{string.Join(", ", notYieldingUnits)}]");
                 }
 
-                // Case 1: All units yield (both choose PROCEED) - both move, no combat
+                // Case 1: All units yield (all choose PROCEED in PASSING, or all choose YIELD in ENTERING)
+                // Result: Peaceful resolution - all moves execute, no combat
                 if (notYieldingUnits.Count == 0)
                 {
                     // All units are proceeding peacefully - execute all moves
@@ -451,26 +484,33 @@ namespace PlunkAndPlunder.Resolution
                         ExecuteUnitMove(unitId, collision, events);
                     }
 
-                    events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination, "All units proceeded, no combat"));
+                    events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination,
+                        "All units proceeded peacefully, no combat"));
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] All units proceeded peacefully at {collision.destination}");
+                        Debug.Log($"[TurnResolver] RESOLUTION: All units proceeded peacefully at {collision.destination}");
                     }
                 }
-                // Case 2: Some units yield - non-yielding units move (or fight if multiple)
+                // Case 2: Some units yield, some don't
+                // Result: Non-yielding units get the tile (or fight each other if multiple)
                 else if (yieldingUnits.Count > 0)
                 {
-                    // If only one unit not yielding, it moves
+                    // If only one unit not yielding, it gets the tile
                     if (notYieldingUnits.Count == 1)
                     {
                         string movingUnitId = notYieldingUnits[0];
                         ExecuteUnitMove(movingUnitId, collision, events);
 
                         events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination,
-                            $"{movingUnitId} moved, others yielded"));
+                            $"Unit {movingUnitId} claimed the tile, others yielded"));
+
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] RESOLUTION: Unit {movingUnitId} gets the tile, others yielded");
+                        }
                     }
-                    // Multiple units not yielding - they fight
+                    // Multiple units not yielding - they all want the tile, so they fight
                     else
                     {
                         // Move all non-yielding units to the collision point
@@ -479,18 +519,25 @@ namespace PlunkAndPlunder.Resolution
                             ExecuteUnitMove(unitId, collision, events);
                         }
 
-                        // Trigger combat between non-yielding units
+                        // Trigger combat between non-yielding units (fight to the death - they can't share the tile)
                         events.AddRange(ResolveCombatAtLocation(notYieldingUnits, collision.destination));
 
                         events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination,
-                            $"Combat triggered between {notYieldingUnits.Count} non-yielding units"));
+                            $"Combat to the death between {notYieldingUnits.Count} non-yielding units"));
+
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] RESOLUTION: {notYieldingUnits.Count} units fight to the death for the tile");
+                        }
                     }
                 }
-                // Case 3: No units yield - ONE ROUND of combat happens, ships stay in place
+                // Case 3: NO units yield - all want to fight
+                // Result: CONTESTED TILE - ONE ROUND of combat, ships STAY in their original positions
+                // They will have another chance next turn to yield or continue attacking
                 else
                 {
-                    // DO NOT move units - ships stay in their current positions during combat
-                    // Get units involved
+                    // DO NOT move units - ships stay in their current positions during contested combat
+                    // This creates a "standoff" where they can try again next turn
                     List<Unit> combatUnits = new List<Unit>();
                     foreach (string unitId in collision.unitIds)
                     {
@@ -501,11 +548,16 @@ namespace PlunkAndPlunder.Resolution
                         }
                     }
 
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] CONTESTED TILE: No units yielded - fighting ONE round, staying in position");
+                    }
+
                     // Trigger ONE ROUND of combat between enemy ships
-                    // Ships remain at their starting positions
+                    // Ships remain at their starting positions (contested)
                     if (combatUnits.Count == 2 && combatUnits[0].ownerId != combatUnits[1].ownerId)
                     {
-                        // Use collision destination as the "location" for the combat event
+                        // Use collision destination as the "location" for the combat event (for visualization)
                         events.AddRange(ResolveOneRoundOfCombat(combatUnits[0], combatUnits[1], collision.destination));
                     }
                     else if (combatUnits.Count > 2)
@@ -528,7 +580,12 @@ namespace PlunkAndPlunder.Resolution
                     }
 
                     events.Add(new CollisionResolvedEvent(turnNumber, collision.unitIds, collision.destination,
-                        $"No units yielded, combat round triggered (ships remain in position)"));
+                        $"CONTESTED TILE: All units attacked - combat round (ships remain in original positions)"));
+
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] Tile {collision.destination} remains CONTESTED - units can try again next turn");
+                    }
                 }
             }
 
@@ -650,6 +707,11 @@ namespace PlunkAndPlunder.Resolution
             return events;
         }
 
+        /// <summary>
+        /// Resolve combat at a specific location - when enemy units occupy the same tile
+        /// CRITICAL RULE: Enemy ships CANNOT occupy the same tile - they must fight until one is destroyed
+        /// Friendly ships from the same player CAN peacefully stack on the same tile
+        /// </summary>
         private List<GameEvent> ResolveCombatAtLocation(List<string> unitIds, HexCoord location)
         {
             List<GameEvent> events = new List<GameEvent>();
@@ -669,20 +731,42 @@ namespace PlunkAndPlunder.Resolution
                 unitsByPlayer[unit.ownerId].Add(unit);
             }
 
-            // If all units belong to same player, no combat
+            // If all units belong to same player, no combat needed
             // RULE: Friendly ships from the same player can occupy the same square peacefully
-            if (unitsByPlayer.Count == 1) return events;
+            if (unitsByPlayer.Count == 1)
+            {
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] All {units.Count} units at {location} belong to same player - peaceful stacking allowed");
+                }
+                return events;
+            }
+
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] ===== COMBAT TO THE DEATH at {location} =====");
+                Debug.Log($"[TurnResolver] RULE ENFORCEMENT: Enemy ships CANNOT occupy same tile - must fight until one is destroyed");
+                Debug.Log($"[TurnResolver] {units.Count} enemy units from {unitsByPlayer.Count} different players");
+            }
 
             // Combat between different players - fight to the death!
             // RULE: Enemy ships CANNOT occupy the same square - they must fight until one is destroyed
             if (units.Count == 2 && units[0].ownerId != units[1].ownerId)
             {
                 // Direct 1v1 combat - fight until one dies
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] 1v1 combat to the death: {units[0].id} vs {units[1].id}");
+                }
                 events.AddRange(ResolveCombatToTheDeath(units[0], units[1], location));
             }
             else
             {
                 // Multiple units - do pairwise combat (could happen with 3+ ships)
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] Multi-unit combat: {units.Count} ships fighting pairwise");
+                }
                 for (int i = 0; i < units.Count; i++)
                 {
                     for (int j = i + 1; j < units.Count; j++)
@@ -1586,6 +1670,158 @@ namespace PlunkAndPlunder.Resolution
             {
                 Debug.Log($"[TurnResolver] Reset movement for {allUnits.Count} units");
             }
+        }
+
+        /// <summary>
+        /// Resolve attack shipyard orders
+        /// Ship attacks enemy shipyard: roll 1d6, on 5-6 destroy shipyard and move ship in, on 1-4 ship stays in place
+        /// </summary>
+        private List<GameEvent> ResolveAttackShipyardOrders(List<AttackShipyardOrder> orders)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            foreach (AttackShipyardOrder order in orders)
+            {
+                Unit attackerShip = unitManager.GetUnit(order.unitId);
+                if (attackerShip == null)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Ship {order.unitId} not found for shipyard attack");
+                    }
+                    continue;
+                }
+
+                // Get target shipyard
+                Structure targetShipyard = structureManager.GetStructureAtPosition(order.targetPosition);
+                if (targetShipyard == null || targetShipyard.type != StructureType.SHIPYARD)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] No shipyard found at {order.targetPosition} for attack");
+                    }
+                    continue;
+                }
+
+                // Verify attacker doesn't own the shipyard
+                if (targetShipyard.ownerId == order.playerId)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Player {order.playerId} cannot attack their own shipyard");
+                    }
+                    continue;
+                }
+
+                // Execute the move portion first (if there's a path)
+                if (order.path != null && order.path.Count > 1)
+                {
+                    // Move ship along path to get adjacent to shipyard
+                    int movementCapacity = attackerShip.GetMovementCapacity();
+                    int pathLength = order.path.Count - 1; // Subtract starting position
+                    int movesThisTurn = Mathf.Min(movementCapacity, pathLength);
+
+                    // Move to final position before attack
+                    HexCoord attackPosition = order.path[movesThisTurn];
+
+                    // Verify ship is now adjacent to target
+                    int distanceToTarget = attackPosition.Distance(order.targetPosition);
+                    if (distanceToTarget > 1)
+                    {
+                        if (enableLogging)
+                        {
+                            Debug.LogWarning($"[TurnResolver] Ship {order.unitId} not adjacent to target shipyard after move (distance: {distanceToTarget})");
+                        }
+                        continue;
+                    }
+
+                    // Update ship position (but don't create move event, that will be implicit in attack)
+                    attackerShip.position = attackPosition;
+                    attackerShip.movementRemaining = movementCapacity - movesThisTurn;
+
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] Ship {order.unitId} moved to {attackPosition} to attack shipyard at {order.targetPosition}");
+                    }
+                }
+
+                // Roll 1d6 for attack
+                System.Random rng = new System.Random(turnNumber + attackerShip.id.GetHashCode() + order.targetPosition.GetHashCode());
+                int diceRoll = rng.Next(1, 7); // 1-6
+
+                bool attackSuccess = (diceRoll >= 5); // 5 or 6 = success
+
+                // Create attack event
+                events.Add(new ShipyardAttackedEvent(
+                    turnNumber,
+                    order.unitId,
+                    targetShipyard.id,
+                    order.playerId,
+                    targetShipyard.ownerId,
+                    order.targetPosition,
+                    diceRoll,
+                    attackSuccess
+                ));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] Player {order.playerId} ship {order.unitId} attacks shipyard {targetShipyard.id} at {order.targetPosition}: rolled {diceRoll} - {(attackSuccess ? "SUCCESS" : "FAILED")}");
+                }
+
+                if (attackSuccess)
+                {
+                    // Shipyard is destroyed
+                    events.Add(new ShipyardDestroyedEvent(
+                        turnNumber,
+                        targetShipyard.id,
+                        targetShipyard.ownerId,
+                        order.targetPosition,
+                        order.unitId
+                    ));
+
+                    // Remove the shipyard structure
+                    structureManager.RemoveStructure(targetShipyard.id);
+
+                    // Move ship into the shipyard position
+                    HexCoord from = attackerShip.position;
+                    attackerShip.position = order.targetPosition;
+
+                    // Create move event for the ship moving into the destroyed shipyard's position
+                    List<HexCoord> finalPath = new List<HexCoord> { from, order.targetPosition };
+                    events.Add(new UnitMovedEvent(
+                        turnNumber,
+                        order.unitId,
+                        from,
+                        order.targetPosition,
+                        finalPath,
+                        false,
+                        null,
+                        1, // Used 1 movement to enter
+                        attackerShip.movementRemaining - 1
+                    ));
+
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] Shipyard {targetShipyard.id} destroyed! Ship {order.unitId} moved into position {order.targetPosition}");
+                    }
+                }
+                else
+                {
+                    // Attack failed - ship stays where it is
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] Attack failed - ship {order.unitId} remains at {attackerShip.position}");
+                    }
+                }
+
+                // Log to game logger
+                GameLogger.LogPlayerAction(order.playerId,
+                    attackSuccess
+                        ? $"Ship {order.unitId} rolled {diceRoll} and destroyed enemy shipyard at {order.targetPosition}"
+                        : $"Ship {order.unitId} rolled {diceRoll} and failed to destroy enemy shipyard at {order.targetPosition}");
+            }
+
+            return events;
         }
     }
 }

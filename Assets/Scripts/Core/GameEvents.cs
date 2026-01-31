@@ -36,7 +36,9 @@ namespace PlunkAndPlunder.Core
         ConflictDetected,
         CollisionDetected,
         CollisionNeedsResolution,
-        CollisionResolved
+        CollisionResolved,
+        ShipyardAttacked,
+        ShipyardDestroyed
     }
 
     [Serializable]
@@ -276,6 +278,51 @@ namespace PlunkAndPlunder.Core
             this.unitIds = unitIds;
             this.destination = destination;
             this.resolution = resolution;
+        }
+    }
+
+    [Serializable]
+    public class ShipyardAttackedEvent : GameEvent
+    {
+        public string attackerUnitId;
+        public string shipyardId;
+        public int attackingPlayerId;
+        public int defendingPlayerId;
+        public HexCoord position;
+        public int diceRoll;
+        public bool success; // true if roll was 5-6
+
+        public ShipyardAttackedEvent(int turnNumber, string attackerUnitId, string shipyardId,
+            int attackingPlayerId, int defendingPlayerId, HexCoord position, int diceRoll, bool success)
+            : base(turnNumber, GameEventType.ShipyardAttacked,
+                success ? $"Player {attackingPlayerId} rolled {diceRoll} and successfully attacked shipyard at {position}!"
+                        : $"Player {attackingPlayerId} rolled {diceRoll} and failed to capture shipyard at {position}")
+        {
+            this.attackerUnitId = attackerUnitId;
+            this.shipyardId = shipyardId;
+            this.attackingPlayerId = attackingPlayerId;
+            this.defendingPlayerId = defendingPlayerId;
+            this.position = position;
+            this.diceRoll = diceRoll;
+            this.success = success;
+        }
+    }
+
+    [Serializable]
+    public class ShipyardDestroyedEvent : GameEvent
+    {
+        public string shipyardId;
+        public int ownerId;
+        public HexCoord position;
+        public string attackerUnitId; // Unit that destroyed it
+
+        public ShipyardDestroyedEvent(int turnNumber, string shipyardId, int ownerId, HexCoord position, string attackerUnitId)
+            : base(turnNumber, GameEventType.ShipyardDestroyed, $"Shipyard {shipyardId} (Player {ownerId}) destroyed at {position}")
+        {
+            this.shipyardId = shipyardId;
+            this.ownerId = ownerId;
+            this.position = position;
+            this.attackerUnitId = attackerUnitId;
         }
     }
 }

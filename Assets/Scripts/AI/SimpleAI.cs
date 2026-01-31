@@ -41,14 +41,21 @@ namespace PlunkAndPlunder.AI
             Player player = playerManager.GetPlayer(playerId);
 
             if (player == null || structureManager == null)
+            {
+                Debug.LogWarning($"[AI Player {playerId}] Cannot generate orders: player or structureManager is null");
                 return orders;
+            }
+
+            Debug.Log($"[AI Player {playerId}] === STARTING ORDER GENERATION === Gold: {player.gold}");
 
             // Get all units for this player
             List<Unit> myUnits = unitManager.GetUnitsForPlayer(playerId);
+            Debug.Log($"[AI Player {playerId}] Has {myUnits.Count} units");
 
             // Get player's shipyards
             List<Structure> myShipyards = structureManager.GetStructuresForPlayer(playerId)
                 .FindAll(s => s.type == StructureType.SHIPYARD);
+            Debug.Log($"[AI Player {playerId}] Has {myShipyards.Count} shipyards");
 
             // Get all enemy units
             List<Unit> enemyUnits = new List<Unit>();
@@ -56,25 +63,38 @@ namespace PlunkAndPlunder.AI
             {
                 if (otherPlayer.id != playerId)
                 {
-                    enemyUnits.AddRange(unitManager.GetUnitsForPlayer(otherPlayer.id));
+                    List<Unit> otherUnits = unitManager.GetUnitsForPlayer(otherPlayer.id);
+                    enemyUnits.AddRange(otherUnits);
+                    Debug.Log($"[AI Player {playerId}] Enemy Player {otherPlayer.id} has {otherUnits.Count} units");
                 }
             }
+            Debug.Log($"[AI Player {playerId}] Total enemy units: {enemyUnits.Count}");
 
             // Get all harbors (for expansion)
             List<Tile> harbors = grid.GetTilesOfType(TileType.HARBOR);
 
             // Strategy 1: Build ships at shipyards if we have gold
+            // Build more aggressively - up to 10 ships total
             foreach (Structure shipyard in myShipyards)
             {
                 if (player.gold >= BuildingConfig.BUILD_SHIP_COST && shipyard.buildQueue.Count < BuildingConfig.MAX_QUEUE_SIZE)
                 {
-                    // Only build if we have less than 5 ships
-                    if (myUnits.Count < 5)
+                    // Build ships up to 10 total (more aggressive expansion)
+                    if (myUnits.Count < 10)
                     {
                         BuildShipOrder buildOrder = new BuildShipOrder(playerId, shipyard.id, shipyard.position);
                         orders.Add(buildOrder);
-                        Debug.Log($"[AI Player {playerId}] Building ship at shipyard {shipyard.id}");
+                        player.gold -= BuildingConfig.BUILD_SHIP_COST; // Track gold spending in planning
+                        Debug.Log($"[AI Player {playerId}] BUILDING ship at shipyard {shipyard.id} (Gold: {player.gold + BuildingConfig.BUILD_SHIP_COST} -> {player.gold})");
                     }
+                    else
+                    {
+                        Debug.Log($"[AI Player {playerId}] Not building - already have {myUnits.Count} ships (max 10)");
+                    }
+                }
+                else if (player.gold < BuildingConfig.BUILD_SHIP_COST)
+                {
+                    Debug.Log($"[AI Player {playerId}] Not enough gold to build ship (have {player.gold}, need {BuildingConfig.BUILD_SHIP_COST})");
                 }
             }
 
@@ -87,12 +107,22 @@ namespace PlunkAndPlunder.AI
                 if (currentTile != null && currentTile.type == TileType.HARBOR)
                 {
                     Structure existingStructure = structureManager.GetStructureAtPosition(unit.position);
-                    if (existingStructure == null && player.gold >= BuildingConfig.DEPLOY_SHIPYARD_COST)
+
+                    // Check if there's no shipyard OR if there's an enemy/neutral shipyard
+                    if (existingStructure == null || existingStructure.ownerId != playerId)
                     {
-                        DeployShipyardOrder deployOrder = new DeployShipyardOrder(unit.id, playerId, unit.position);
-                        orders.Add(deployOrder);
-                        Debug.Log($"[AI Player {playerId}] Deploying shipyard at {unit.position}");
-                        continue; // Don't move this unit
+                        if (player.gold >= BuildingConfig.DEPLOY_SHIPYARD_COST)
+                        {
+                            DeployShipyardOrder deployOrder = new DeployShipyardOrder(unit.id, playerId, unit.position);
+                            orders.Add(deployOrder);
+                            player.gold -= BuildingConfig.DEPLOY_SHIPYARD_COST; // Track gold spending
+                            Debug.Log($"[AI Player {playerId}] DEPLOYING shipyard at {unit.position} (Gold: {player.gold + BuildingConfig.DEPLOY_SHIPYARD_COST} -> {player.gold})");
+                            continue; // Don't move this unit
+                        }
+                        else
+                        {
+                            Debug.Log($"[AI Player {playerId}] Unit {unit.id} on harbor at {unit.position} but not enough gold to deploy (have {player.gold}, need {BuildingConfig.DEPLOY_SHIPYARD_COST})");
+                        }
                     }
                 }
 
@@ -101,12 +131,13 @@ namespace PlunkAndPlunder.AI
 
                 if (!targetPos.Equals(default(HexCoord)))
                 {
-                    // Try to move toward target
-                    List<HexCoord> path = pathfinding.FindPath(unit.position, targetPos, unit.GetMovementCapacity() + 2);
+                    // Try to move toward target - use much longer pathfinding range (50 tiles)
+                    // AI should be able to plan long-distance moves
+                    List<HexCoord> path = pathfinding.FindPath(unit.position, targetPos, 50);
 
                     if (path != null && path.Count > 1)
                     {
-                        // Move as far as movement allows
+                        // Move as far as movement allows this turn
                         int maxMoveDistance = Mathf.Min(unit.GetMovementCapacity(), path.Count - 1);
                         if (maxMoveDistance > 0)
                         {
@@ -118,13 +149,25 @@ namespace PlunkAndPlunder.AI
 
                             MoveOrder order = new MoveOrder(unit.id, playerId, movePath);
                             orders.Add(order);
-                            Debug.Log($"[AI Player {playerId}] Moving unit {unit.id} toward target {targetPos}");
+                            Debug.Log($"[AI Player {playerId}] MOVING unit {unit.id} from {unit.position} toward target {targetPos} (distance: {unit.position.Distance(targetPos)}, moving {maxMoveDistance} tiles)");
+                        }
+                        else
+                        {
+                            Debug.Log($"[AI Player {playerId}] Unit {unit.id} cannot move (maxMoveDistance = 0)");
                         }
                     }
+                    else
+                    {
+                        Debug.Log($"[AI Player {playerId}] Unit {unit.id} at {unit.position} - no path found to target {targetPos}");
+                    }
+                }
+                else
+                {
+                    Debug.Log($"[AI Player {playerId}] Unit {unit.id} at {unit.position} - no target found");
                 }
             }
 
-            Debug.Log($"[AI Player {playerId}] Generated {orders.Count} orders");
+            Debug.Log($"[AI Player {playerId}] === COMPLETED ORDER GENERATION === Generated {orders.Count} orders");
             return orders;
         }
 
@@ -132,45 +175,63 @@ namespace PlunkAndPlunder.AI
         {
             HexCoord nearest = default(HexCoord);
             int minDistance = int.MaxValue;
+            string targetType = "none";
 
-            // Priority 1: Check nearby enemies (within 10 tiles)
+            // Priority 1: Check ALL enemies (removed 10-tile limit for more aggressive AI)
             foreach (Unit enemy in enemyUnits)
             {
                 int dist = position.Distance(enemy.position);
-                if (dist < minDistance && dist <= 10)
+                if (dist < minDistance)
                 {
                     minDistance = dist;
                     nearest = enemy.position;
+                    targetType = $"enemy_unit_{enemy.id}";
                 }
             }
 
-            // Priority 2: Check unclaimed harbors (for expansion)
-            foreach (Tile harbor in harbors)
+            // Priority 2: Check unclaimed harbors (for expansion) - only if no nearby enemy
+            if (minDistance > 15) // Only expand if no enemy within 15 tiles
             {
-                Structure existingStructure = structureManager.GetStructureAtPosition(harbor.coord);
-                if (existingStructure == null) // Harbor without shipyard
+                foreach (Tile harbor in harbors)
                 {
-                    int dist = position.Distance(harbor.coord);
-                    if (dist < minDistance - 3) // Prefer enemies, but consider nearby unclaimed harbors
+                    Structure existingStructure = structureManager.GetStructureAtPosition(harbor.coord);
+                    if (existingStructure == null || existingStructure.ownerId == -1) // Harbor without shipyard or neutral
                     {
-                        minDistance = dist;
-                        nearest = harbor.coord;
+                        int dist = position.Distance(harbor.coord);
+                        if (dist < minDistance)
+                        {
+                            minDistance = dist;
+                            nearest = harbor.coord;
+                            targetType = "unclaimed_harbor";
+                        }
                     }
                 }
             }
 
-            // Priority 3: If no nearby enemies or harbors, just pick the closest enemy
-            if (nearest.Equals(default(HexCoord)) && enemyUnits.Count > 0)
+            // Priority 3: Check enemy shipyards (for conquest) - if no closer targets
+            List<Structure> allStructures = structureManager.GetAllStructures();
+            foreach (Structure structure in allStructures)
             {
-                foreach (Unit enemy in enemyUnits)
+                if (structure.type == StructureType.SHIPYARD && structure.ownerId != -1)
                 {
-                    int dist = position.Distance(enemy.position);
+                    // Don't target own shipyards
+                    Unit anyUnit = enemyUnits.FirstOrDefault();
+                    if (anyUnit != null && structure.ownerId != anyUnit.ownerId)
+                        continue;
+
+                    int dist = position.Distance(structure.position);
                     if (dist < minDistance)
                     {
                         minDistance = dist;
-                        nearest = enemy.position;
+                        nearest = structure.position;
+                        targetType = $"enemy_shipyard_{structure.id}";
                     }
                 }
+            }
+
+            if (!nearest.Equals(default(HexCoord)))
+            {
+                Debug.Log($"[AI] FindNearestTarget from {position}: Found {targetType} at {nearest} (distance: {minDistance})");
             }
 
             return nearest;

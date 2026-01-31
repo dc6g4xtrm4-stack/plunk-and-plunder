@@ -398,5 +398,112 @@ namespace PlunkAndPlunder.Orders
 
             return true;
         }
+
+        public bool ValidateAttackShipyardOrder(AttackShipyardOrder order, out string error)
+        {
+            error = null;
+
+            // Check unit exists
+            Unit unit = unitManager.GetUnit(order.unitId);
+            if (unit == null)
+            {
+                error = "Unit does not exist";
+                return false;
+            }
+
+            // Check ownership
+            if (unit.ownerId != order.playerId)
+            {
+                error = "Player does not own this unit";
+                return false;
+            }
+
+            // Check unit is a ship
+            if (unit.type != UnitType.SHIP)
+            {
+                error = "Only ships can attack shipyards";
+                return false;
+            }
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check target shipyard exists
+            Structure targetShipyard = structureManager.GetStructure(order.targetShipyardId);
+            if (targetShipyard == null)
+            {
+                error = "Target shipyard does not exist";
+                return false;
+            }
+
+            // Check target is a shipyard
+            if (targetShipyard.type != StructureType.SHIPYARD)
+            {
+                error = "Target structure is not a shipyard";
+                return false;
+            }
+
+            // Check target is not owned by the player (can't attack your own shipyard)
+            if (targetShipyard.ownerId == order.playerId)
+            {
+                error = "Cannot attack your own shipyard";
+                return false;
+            }
+
+            // Check target position matches shipyard position
+            if (!targetShipyard.position.Equals(order.targetPosition))
+            {
+                error = "Target position does not match shipyard position";
+                return false;
+            }
+
+            // Check path validity (if provided)
+            if (order.path != null && order.path.Count > 0)
+            {
+                // Check path starts from unit position
+                if (!order.path[0].Equals(unit.position))
+                {
+                    error = "Path does not start at unit position";
+                    return false;
+                }
+
+                // Check path ends at or adjacent to target
+                HexCoord pathEnd = order.path[order.path.Count - 1];
+                int distanceToTarget = pathEnd.Distance(order.targetPosition);
+                if (distanceToTarget > 1)
+                {
+                    error = "Path does not end adjacent to target shipyard";
+                    return false;
+                }
+
+                // Check all tiles in path are navigable and adjacent
+                for (int i = 0; i < order.path.Count; i++)
+                {
+                    HexCoord coord = order.path[i];
+
+                    if (!grid.IsNavigable(coord))
+                    {
+                        error = $"Path contains non-navigable tile at {coord}";
+                        return false;
+                    }
+
+                    if (i > 0)
+                    {
+                        HexCoord prev = order.path[i - 1];
+                        if (coord.Distance(prev) != 1)
+                        {
+                            error = $"Path is not continuous between {prev} and {coord}";
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
     }
 }

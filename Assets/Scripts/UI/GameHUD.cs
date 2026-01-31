@@ -572,11 +572,15 @@ namespace PlunkAndPlunder.UI
             }
 
             // Show visual indicator on the harbor tile where shipyard will be deployed
+            // NOTE: This creates a visible path visualization showing the user where the shipyard will be built
+            // The visualization remains visible until orders are submitted
             if (pathVisualizer != null)
             {
                 // Create a single-point path to highlight the deployment location
+                // The path starts and ends at the same position, which PathVisualizer renders as a highlight
                 List<HexCoord> deploymentIndicator = new List<HexCoord> { selectedUnit.position, selectedUnit.position };
-                pathVisualizer.AddPath(selectedUnit.id, deploymentIndicator, isPrimary: true);
+                pathVisualizer.AddPath(selectedUnit.id, deploymentIndicator, isPrimary: true, movementCapacity: 0);
+                Debug.Log($"[GameHUD] VISUALIZATION: Showing DEPLOYMENT indicator for shipyard at {selectedUnit.position}");
             }
 
             // Create deploy shipyard order
@@ -586,7 +590,7 @@ namespace PlunkAndPlunder.UI
             // Track that this unit has an order
             unitsWithOrders.Add(selectedUnit.id);
 
-            Debug.Log($"[GameHUD] Deploy shipyard order queued for {selectedUnit.id}");
+            Debug.Log($"[GameHUD] Deploy shipyard order queued for {selectedUnit.id} at {selectedUnit.position}");
             selectedUnitText.text += "\n\nDeploy Shipyard order queued!";
 
             // Clear selection since unit will be consumed
@@ -891,6 +895,16 @@ namespace PlunkAndPlunder.UI
 
         /// <summary>
         /// Update all path visualizations based on current selection and pending orders
+        ///
+        /// PATH VISUALIZATION DESIGN:
+        /// - Shows ALL pending actions for user's units before they submit orders
+        /// - Movement: Yellow line showing path, split into "this turn" (solid) and "future turns" (dotted)
+        /// - Deployment: Highlights the tile where shipyard will be built
+        /// - Combat: Shows path to enemy, indicating attack intent
+        /// - Attack Shipyard: Shows path to target shipyard
+        /// - Primary (selected unit): Brighter/solid yellow
+        /// - Secondary (other units): Semi-transparent yellow
+        /// - User can see all planned actions before clicking "Submit Orders"
         /// </summary>
         private void UpdatePathVisualizations()
         {
@@ -902,7 +916,7 @@ namespace PlunkAndPlunder.UI
             // Don't clear all paths - PathVisualizer.AddPath() handles per-unit clearing
             // Clearing all would remove paths we're about to re-add
 
-            // Add all pending move paths
+            // Add all pending move paths (includes movement, combat paths, attack shipyard paths)
             int pathsAdded = 0;
             foreach (var kvp in pendingMovePaths)
             {

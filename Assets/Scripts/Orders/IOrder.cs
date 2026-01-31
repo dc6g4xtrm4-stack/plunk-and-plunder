@@ -20,7 +20,8 @@ namespace PlunkAndPlunder.Orders
         UpgradeShip,
         UpgradeSails,
         UpgradeCannons,
-        UpgradeMaxLife
+        UpgradeMaxLife,
+        AttackShipyard
     }
 
     [Serializable]
@@ -199,6 +200,30 @@ namespace PlunkAndPlunder.Orders
         public OrderType GetOrderType()
         {
             return OrderType.UpgradeMaxLife;
+        }
+    }
+
+    [Serializable]
+    public class AttackShipyardOrder : IOrder
+    {
+        public string unitId { get; set; }
+        public int playerId { get; set; }
+        public string targetShipyardId;
+        public HexCoord targetPosition;
+        public List<HexCoord> path; // Path to the shipyard
+
+        public AttackShipyardOrder(string unitId, int playerId, string targetShipyardId, HexCoord targetPosition, List<HexCoord> path)
+        {
+            this.unitId = unitId;
+            this.playerId = playerId;
+            this.targetShipyardId = targetShipyardId;
+            this.targetPosition = targetPosition;
+            this.path = path;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.AttackShipyard;
         }
     }
 }
