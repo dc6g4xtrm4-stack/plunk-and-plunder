@@ -49,10 +49,21 @@ namespace PlunkAndPlunder.UI
 
         private void InitializeVisualizers()
         {
-            // Create path visualizer
+            // CRITICAL: Create PathVisualizer as sibling of GameHUD, NOT child
+            // This prevents it from being affected when GameHUD state changes during combat
+
+            Canvas canvas = GetComponentInParent<Canvas>();
+            if (canvas == null)
+            {
+                Debug.LogError("[GameHUD] Cannot find Canvas for PathVisualizer");
+                return;
+            }
+
             GameObject pathVisualizerObj = new GameObject("PathVisualizer");
-            pathVisualizerObj.transform.SetParent(transform, false);
+            pathVisualizerObj.transform.SetParent(canvas.transform, false);  // Sibling of GameHUD!
             pathVisualizer = pathVisualizerObj.AddComponent<PathVisualizer>();
+
+            Debug.Log("[GameHUD] PathVisualizer created as Canvas child (independent of GameHUD lifecycle)");
         }
 
         private void CreateLayout()
@@ -68,11 +79,6 @@ namespace PlunkAndPlunder.UI
             phaseText = CreateText("Phase: Planning", 28, topBar.transform);
             phaseText.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, 0);
 
-            // Player info text (gold)
-            playerInfoText = CreateText("Gold: 0", 24, topBar.transform);
-            playerInfoText.GetComponent<RectTransform>().anchoredPosition = new Vector2(600, 0);
-            playerInfoText.alignment = TextAnchor.MiddleRight;
-
             // Submit button - positioned below top bar
             submitButton = CreateButton("Submit Orders", new Vector2(750, 420), OnSubmitClicked);
             submitButton.transform.SetParent(transform, false);
@@ -86,6 +92,16 @@ namespace PlunkAndPlunder.UI
             // Auto-resolve button (debug) - positioned below top bar
             autoResolveButton = CreateButton("Auto-Resolve (Debug)", new Vector2(520, 420), OnAutoResolveClicked);
             autoResolveButton.transform.SetParent(transform, false);
+
+            // Player stats panel (left side, above unit panel)
+            GameObject playerStatsPanel = CreatePanel(new Vector2(-800, 400), new Vector2(300, 100), new Color(0.1f, 0.1f, 0.1f, 0.8f));
+            playerStatsPanel.transform.SetParent(transform, false);
+
+            // Player info text (gold and orders count)
+            playerInfoText = CreateText("Gold: 0 | Orders: 0", 20, playerStatsPanel.transform);
+            playerInfoText.alignment = TextAnchor.MiddleLeft;
+            playerInfoText.GetComponent<RectTransform>().anchoredPosition = new Vector2(-140, 0);
+            playerInfoText.GetComponent<RectTransform>().sizeDelta = new Vector2(280, 80);
 
             // Selected unit panel
             GameObject unitPanel = CreatePanel(new Vector2(-800, -300), new Vector2(300, 250), new Color(0.1f, 0.1f, 0.1f, 0.8f));
@@ -1060,6 +1076,13 @@ namespace PlunkAndPlunder.UI
 
         private void OnDestroy()
         {
+            // Clean up PathVisualizer (no longer a child, so won't be destroyed automatically)
+            if (pathVisualizer != null && pathVisualizer.gameObject != null)
+            {
+                Debug.Log("[GameHUD] Destroying PathVisualizer");
+                Destroy(pathVisualizer.gameObject);
+            }
+
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.OnPhaseChanged -= HandlePhaseChanged;
