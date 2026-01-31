@@ -59,6 +59,9 @@ namespace PlunkAndPlunder.Core
             hexRendererObj.transform.SetParent(renderersObj.transform);
             HexRenderer hexRenderer = hexRendererObj.AddComponent<HexRenderer>();
 
+            // Add globe wrapping effect
+            GlobeEffect globeEffect = hexRendererObj.AddComponent<GlobeEffect>();
+
             GameObject unitRendererObj = new GameObject("UnitRenderer");
             unitRendererObj.transform.SetParent(renderersObj.transform);
             UnitRenderer unitRenderer = unitRendererObj.AddComponent<UnitRenderer>();

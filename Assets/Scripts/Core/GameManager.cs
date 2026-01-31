@@ -463,6 +463,13 @@ namespace PlunkAndPlunder.Core
         {
             Debug.Log("[GameManager] Animation complete, transitioning to next phase");
 
+            // Reset auto-resolve flag
+            if (isAutoResolving)
+            {
+                Debug.Log("[GameManager] Auto-resolve turn complete");
+                isAutoResolving = false;
+            }
+
             // Final state update
             OnGameStateUpdated?.Invoke(state);
 
@@ -710,20 +717,29 @@ namespace PlunkAndPlunder.Core
                 return;
             }
 
-            // Show dice combat UI
-            if (diceCombatUI != null)
+            // If auto-resolving, skip UI and auto-continue after a brief delay
+            if (isAutoResolving)
             {
-                diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue);
-
-                // Increment round number for next combat between these units
-                combatRounds[combatKey] = roundNumber + 1;
+                Debug.Log("[GameManager] Auto-resolve: skipping combat UI, auto-continuing");
+                StartCoroutine(AutoContinueCombat());
             }
             else
             {
-                // Fallback to old UI if dice UI not available
-                if (combatResultsUI != null)
+                // Show dice combat UI
+                if (diceCombatUI != null)
                 {
-                    combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue);
+                    diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue);
+
+                    // Increment round number for next combat between these units
+                    combatRounds[combatKey] = roundNumber + 1;
+                }
+                else
+                {
+                    // Fallback to old UI if dice UI not available
+                    if (combatResultsUI != null)
+                    {
+                        combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue);
+                    }
                 }
             }
 
@@ -749,6 +765,14 @@ namespace PlunkAndPlunder.Core
             }
         }
 
+        private IEnumerator AutoContinueCombat()
+        {
+            // Wait briefly to simulate combat happening
+            yield return new WaitForSeconds(0.1f);
+            Debug.Log("[GameManager] Auto-resolve: continuing after combat");
+            turnAnimator.ResumeAnimation();
+        }
+
         private void OnCombatResultsContinue()
         {
             Debug.Log("[GameManager] Player acknowledged combat results, resuming animation");
@@ -767,18 +791,41 @@ namespace PlunkAndPlunder.Core
         }
 
         // Debug method for testing
+        private bool isAutoResolving = false;
+
         public void AutoResolveTurn()
         {
-            if (state.phase == GamePhase.Planning)
+            try
             {
-                // Auto-submit for all non-ready players
-                foreach (Player player in state.playerManager.GetActivePlayers())
+                if (state == null)
                 {
-                    if (!player.isReady)
+                    Debug.LogError("[GameManager] Cannot auto-resolve: state is null");
+                    return;
+                }
+
+                if (state.phase == GamePhase.Planning)
+                {
+                    Debug.Log("[GameManager] Auto-resolving turn - submitting empty orders for all players");
+                    isAutoResolving = true;
+
+                    // Auto-submit for all non-ready players
+                    foreach (Player player in state.playerManager.GetActivePlayers())
                     {
-                        SubmitOrders(player.id, new List<IOrder>());
+                        if (!player.isReady)
+                        {
+                            SubmitOrders(player.id, new List<IOrder>());
+                        }
                     }
                 }
+                else
+                {
+                    Debug.LogWarning($"[GameManager] Cannot auto-resolve during {state.phase} phase");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[GameManager] Auto-resolve failed: {ex.Message}\n{ex.StackTrace}");
+                isAutoResolving = false;
             }
         }
 
