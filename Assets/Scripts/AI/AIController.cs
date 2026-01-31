@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using PlunkAndPlunder.Map;
 using PlunkAndPlunder.Orders;
 using PlunkAndPlunder.Players;
+using PlunkAndPlunder.Structures;
 using PlunkAndPlunder.Units;
 
 namespace PlunkAndPlunder.AI
@@ -14,16 +15,19 @@ namespace PlunkAndPlunder.AI
         private HexGrid grid;
         private UnitManager unitManager;
         private PlayerManager playerManager;
+        private StructureManager structureManager;
         private Pathfinding pathfinding;
         private SimpleAI simpleAI;
 
-        public AIController(HexGrid grid, UnitManager unitManager, PlayerManager playerManager, Pathfinding pathfinding)
+        public AIController(HexGrid grid, UnitManager unitManager, PlayerManager playerManager, StructureManager structureManager, Pathfinding pathfinding)
         {
             this.grid = grid;
             this.unitManager = unitManager;
             this.playerManager = playerManager;
+            this.structureManager = structureManager;
             this.pathfinding = pathfinding;
             this.simpleAI = new SimpleAI(grid, unitManager, playerManager, pathfinding);
+            this.simpleAI.SetStructureManager(structureManager);
         }
 
         public List<IOrder> PlanTurn(int playerId)

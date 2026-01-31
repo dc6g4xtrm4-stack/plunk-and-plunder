@@ -103,7 +103,7 @@ namespace PlunkAndPlunder.Core
             pathfinding = new Pathfinding(state.grid);
             orderValidator = new OrderValidator(state.grid, state.unitManager, state.structureManager, state.playerManager);
             turnResolver = new TurnResolver(state.grid, state.unitManager, state.playerManager, state.structureManager, enableDeterministicLogging);
-            aiController = new AIController(state.grid, state.unitManager, state.playerManager, pathfinding);
+            aiController = new AIController(state.grid, state.unitManager, state.playerManager, state.structureManager, pathfinding);
 
             // Initialize turn animator (add component if not present)
             turnAnimator = GetComponent<TurnAnimator>();
