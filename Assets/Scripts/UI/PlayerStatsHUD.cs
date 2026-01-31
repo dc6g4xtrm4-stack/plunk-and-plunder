@@ -46,8 +46,8 @@ namespace PlunkAndPlunder.UI
             panelRect.anchorMax = new Vector2(0f, 0f);  // Bottom-left corner
             panelRect.pivot = new Vector2(0f, 0f);      // Pivot at bottom-left of panel itself
 
-            // Position: 10px from left edge, 150px from bottom (to sit above any bottom UI)
-            panelRect.anchoredPosition = new Vector2(10f, 150f);
+            // Position: Flush against left edge, 150px from bottom (to sit above any bottom UI)
+            panelRect.anchoredPosition = new Vector2(0f, 150f);
 
             // Size: 350px wide, 200px tall (dynamic height adjusted later)
             panelRect.sizeDelta = new Vector2(350f, 200f);
