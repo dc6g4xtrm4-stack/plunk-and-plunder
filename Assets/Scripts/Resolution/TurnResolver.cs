@@ -61,12 +61,8 @@ namespace PlunkAndPlunder.Resolution
             }
             else
             {
-                // Fallback to old system if ConstructionManager not available
-                events.AddRange(ProcessBuildQueues());
-                if (enableLogging)
-                {
-                    Debug.LogWarning($"[TurnResolver] Using legacy build queue processing (ConstructionManager not found)");
-                }
+                // CRITICAL ERROR: ConstructionManager should always be available
+                Debug.LogError($"[TurnResolver] ConstructionManager not found! Construction will not process this turn.");
             }
 
             // Sort orders by type priority and then by unit ID for determinism
@@ -1223,8 +1219,14 @@ namespace PlunkAndPlunder.Resolution
         /// <summary>
         /// Process all shipyard build queues, advancing progress and spawning completed ships
         /// </summary>
+        /// <summary>
+        /// DEPRECATED: Legacy build queue processing - replaced by ConstructionManager
+        /// This method is kept for reference but should not be used
+        /// </summary>
+        [System.Obsolete("Use ConstructionManager.ProcessTurn() instead")]
         private List<GameEvent> ProcessBuildQueues()
         {
+            Debug.LogWarning("[TurnResolver] ProcessBuildQueues() is deprecated - use ConstructionManager.ProcessTurn() instead");
             List<GameEvent> events = new List<GameEvent>();
 
             // Get all shipyards
@@ -1242,7 +1244,7 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Shipyard {shipyard.id} building {currentItem.itemType}: {currentItem.turnsRemaining} turns remaining");
+                    Debug.Log($"[TurnResolver] LEGACY: Shipyard {shipyard.id} building {currentItem.itemType}: {currentItem.turnsRemaining} turns remaining");
                 }
 
                 // Check if item is complete
@@ -1259,7 +1261,7 @@ namespace PlunkAndPlunder.Resolution
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] Shipyard {shipyard.id} completed {currentItem.itemType}, spawned ship {newShip.id}");
+                        Debug.Log($"[TurnResolver] LEGACY: Shipyard {shipyard.id} completed {currentItem.itemType}, spawned ship {newShip.id}");
                     }
                 }
             }
@@ -1273,61 +1275,82 @@ namespace PlunkAndPlunder.Resolution
 
             foreach (BuildShipOrder order in orders)
             {
+                // NEW SYSTEM: Use ConstructionManager for queueing ships
+                if (ConstructionManager.Instance != null)
+                {
+                    var result = ConstructionManager.Instance.QueueShip(order.playerId, order.shipyardId);
+
+                    if (result.success)
+                    {
+                        events.Add(new GameEvent(turnNumber, GameEventType.ShipQueued,
+                            $"Player {order.playerId} queued ship at shipyard {order.shipyardId}"));
+
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] Player {order.playerId} queued ship at {order.shipyardId}, job {result.jobId} (NEW SYSTEM)");
+                        }
+                    }
+                    else
+                    {
+                        if (enableLogging)
+                        {
+                            Debug.LogWarning($"[TurnResolver] Failed to queue ship: {result.reason}");
+                        }
+                    }
+
+                    continue; // Skip legacy code below
+                }
+
+                // LEGACY FALLBACK: Old build queue system
                 Structure shipyard = structureManager.GetStructure(order.shipyardId);
                 if (shipyard == null || shipyard.type != StructureType.SHIPYARD)
                 {
                     if (enableLogging)
                     {
-                        Debug.LogWarning($"[TurnResolver] Shipyard {order.shipyardId} not found");
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Shipyard {order.shipyardId} not found");
                     }
                     continue;
                 }
 
-                // Check ownership
                 if (shipyard.ownerId != order.playerId)
                 {
                     if (enableLogging)
                     {
-                        Debug.LogWarning($"[TurnResolver] Player {order.playerId} does not own shipyard {order.shipyardId}");
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Player {order.playerId} does not own shipyard {order.shipyardId}");
                     }
                     continue;
                 }
 
-                // Check queue space
                 if (shipyard.buildQueue.Count >= BuildingConfig.MAX_QUEUE_SIZE)
                 {
                     if (enableLogging)
                     {
-                        Debug.LogWarning($"[TurnResolver] Shipyard {order.shipyardId} build queue is full");
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Shipyard {order.shipyardId} build queue is full");
                     }
                     continue;
                 }
 
-                // Check player currency
                 Player player = playerManager.GetPlayer(order.playerId);
                 if (player == null || player.gold < BuildingConfig.BUILD_SHIP_COST)
                 {
                     if (enableLogging)
                     {
-                        Debug.LogWarning($"[TurnResolver] Player {order.playerId} does not have enough gold to build ship");
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Player {order.playerId} does not have enough gold to build ship");
                     }
                     continue;
                 }
 
-                // Deduct currency immediately
+                // Legacy: Direct mutation
                 player.gold -= BuildingConfig.BUILD_SHIP_COST;
-
-                // Add to build queue instead of instant spawn
                 BuildQueueItem queueItem = new BuildQueueItem("Ship", BuildingConfig.SHIP_BUILD_TIME, BuildingConfig.BUILD_SHIP_COST);
                 shipyard.buildQueue.Add(queueItem);
 
-                // Create event for queued build
                 events.Add(new GameEvent(turnNumber, GameEventType.ShipQueued,
-                    $"Player {order.playerId} queued ship at shipyard {shipyard.id} ({shipyard.buildQueue.Count}/{BuildingConfig.MAX_QUEUE_SIZE} slots)"));
+                    $"Player {order.playerId} queued ship at shipyard {shipyard.id} (LEGACY)"));
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Player {order.playerId} queued ship at shipyard {shipyard.id} for {BuildingConfig.BUILD_SHIP_COST} gold (queue: {shipyard.buildQueue.Count}/{BuildingConfig.MAX_QUEUE_SIZE})");
+                    Debug.Log($"[TurnResolver] LEGACY: Player {order.playerId} queued ship at shipyard {shipyard.id}");
                 }
             }
 

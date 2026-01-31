@@ -13,6 +13,12 @@ namespace PlunkAndPlunder.Structures
         public StructureType type;
         public int health;
         public int maxHealth;
+
+        /// <summary>
+        /// DEPRECATED: Use ConstructionManager.GetShipyardQueue(id) instead
+        /// This field is kept for save compatibility but should not be accessed directly
+        /// </summary>
+        [System.Obsolete("Use ConstructionManager.GetShipyardQueue() instead of accessing buildQueue directly")]
         public List<BuildQueueItem> buildQueue = new List<BuildQueueItem>();
 
         public Structure(string id, int ownerId, HexCoord position, StructureType type)
