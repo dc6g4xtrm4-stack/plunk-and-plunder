@@ -158,6 +158,10 @@ namespace PlunkAndPlunder.Rendering
             {
                 // Tier 1: Single mast
                 CreateMastWithSail(parent, new Vector3(0, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
+
+                // Add cannons even for tier 1 (all ships have cannons!)
+                int cannonsToRender = GetCannonsPerSide(cannonTier);
+                CreateCannons(parent, cannonsToRender, scaleMultiplier, darkHull);
             }
             else if (healthTier == 2)
             {
@@ -682,7 +686,8 @@ namespace PlunkAndPlunder.Rendering
         }
 
         /// <summary>
-        /// Calculate ship scale based on all upgrades (0.5 → 0.95 of tile size)
+        /// Calculate ship scale based on all upgrades (1.0 → 1.9 of tile size)
+        /// WoW-style dramatic scaling - ships should feel HUGE when fully upgraded
         /// Combines maxHealth, sails, and cannons to determine overall size
         /// </summary>
         private float GetShipScale(Unit unit)
@@ -695,8 +700,8 @@ namespace PlunkAndPlunder.Rendering
             // Combined progress (weighted average: health 40%, sails 30%, cannons 30%)
             float overallProgress = (healthProgress * 0.4f) + (sailProgress * 0.3f) + (cannonProgress * 0.3f);
 
-            // Scale from 0.5 to 0.95 (nearly filling tile when fully upgraded)
-            return Mathf.Lerp(0.5f, 0.95f, overallProgress);
+            // Scale from 1.0 (2x bigger base) to 1.9 (nearly bursting out of tile!)
+            return Mathf.Lerp(1.0f, 1.9f, overallProgress);
         }
 
         /// <summary>
