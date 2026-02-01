@@ -78,10 +78,10 @@ namespace PlunkAndPlunder.Construction
             if (tile == null || tile.type != TileType.HARBOR)
                 return ValidationResult.Invalid("Must deploy on harbor tile");
 
-            // 5. No structure already exists at position
+            // 5. No structure already exists at position (SHIPYARD is the only structure type)
             Structure existingStructure = gameState.structureManager.GetStructureAtPosition(position);
             if (existingStructure != null)
-                return ValidationResult.Invalid("Harbor already has a structure");
+                return ValidationResult.Invalid("Shipyard already exists at this harbor");
 
             // 6. Player has gold for deployment
             Player player = gameState.playerManager.GetPlayer(playerId);

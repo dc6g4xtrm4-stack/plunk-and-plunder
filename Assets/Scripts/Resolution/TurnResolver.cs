@@ -1198,20 +1198,8 @@ namespace PlunkAndPlunder.Resolution
                 // Deduct currency
                 player.gold -= BuildingConfig.DEPLOY_SHIPYARD_COST;
 
-                // Create shipyard - if there's a harbor structure, convert it, otherwise create new
-                Structure shipyard;
-                if (existingStructure != null && existingStructure.type == StructureType.HARBOR)
-                {
-                    // Convert harbor to shipyard
-                    existingStructure.type = StructureType.SHIPYARD;
-                    existingStructure.ownerId = order.playerId;
-                    shipyard = existingStructure;
-                }
-                else
-                {
-                    // Create new shipyard
-                    shipyard = structureManager.CreateStructure(order.playerId, order.position, StructureType.SHIPYARD);
-                }
+                // Create shipyard directly (no harbor structures to convert)
+                Structure shipyard = structureManager.CreateStructure(order.playerId, order.position, StructureType.SHIPYARD);
 
                 // Remove ship (immediately or deferred to TurnAnimator)
                 if (!deferUnitRemoval)

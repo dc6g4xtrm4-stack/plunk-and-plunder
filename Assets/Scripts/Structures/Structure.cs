@@ -34,7 +34,6 @@ namespace PlunkAndPlunder.Structures
 
     public enum StructureType
     {
-        HARBOR,
-        SHIPYARD // Future-ready placeholder
+        SHIPYARD
     }
 }

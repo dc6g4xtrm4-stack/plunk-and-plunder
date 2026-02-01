@@ -48,6 +48,9 @@ namespace PlunkAndPlunder.AI
 
             Debug.Log($"[AI Player {playerId}] === STARTING ORDER GENERATION === Gold: {player.gold}");
 
+            // LOCAL gold tracking - don't modify player.gold during planning!
+            int availableGold = player.gold;
+
             // Get all units for this player
             List<Unit> myUnits = unitManager.GetUnitsForPlayer(playerId);
             Debug.Log($"[AI Player {playerId}] Has {myUnits.Count} units");
@@ -73,32 +76,10 @@ namespace PlunkAndPlunder.AI
             // Get all harbors (for expansion)
             List<Tile> harbors = grid.GetTilesOfType(TileType.HARBOR);
 
-            // Strategy 1: Build ships at shipyards if we have gold
-            // Build more aggressively - up to 10 ships total
-            foreach (Structure shipyard in myShipyards)
-            {
-                if (player.gold >= BuildingConfig.BUILD_SHIP_COST && shipyard.buildQueue.Count < BuildingConfig.MAX_QUEUE_SIZE)
-                {
-                    // Build ships up to 10 total (more aggressive expansion)
-                    if (myUnits.Count < 10)
-                    {
-                        BuildShipOrder buildOrder = new BuildShipOrder(playerId, shipyard.id, shipyard.position);
-                        orders.Add(buildOrder);
-                        player.gold -= BuildingConfig.BUILD_SHIP_COST; // Track gold spending in planning
-                        Debug.Log($"[AI Player {playerId}] BUILDING ship at shipyard {shipyard.id} (Gold: {player.gold + BuildingConfig.BUILD_SHIP_COST} -> {player.gold})");
-                    }
-                    else
-                    {
-                        Debug.Log($"[AI Player {playerId}] Not building - already have {myUnits.Count} ships (max 10)");
-                    }
-                }
-                else if (player.gold < BuildingConfig.BUILD_SHIP_COST)
-                {
-                    Debug.Log($"[AI Player {playerId}] Not enough gold to build ship (have {player.gold}, need {BuildingConfig.BUILD_SHIP_COST})");
-                }
-            }
+            // Strategy 1: PRIORITIZE deploying shipyards (expansion before production)
+            // Check units on harbors FIRST before spending gold on building ships
+            List<Unit> unitsToMove = new List<Unit>(); // Track units that don't deploy
 
-            // Strategy 2: Move units
             foreach (Unit unit in myUnits)
             {
                 Tile currentTile = grid.GetTile(unit.position);
@@ -108,24 +89,57 @@ namespace PlunkAndPlunder.AI
                 {
                     Structure existingStructure = structureManager.GetStructureAtPosition(unit.position);
 
-                    // Check if there's no shipyard OR if there's an enemy/neutral shipyard
-                    if (existingStructure == null || existingStructure.ownerId != playerId)
+                    // Check if there's already a friendly shipyard (only structure type)
+                    bool hasFriendlyShipyard = existingStructure != null && existingStructure.ownerId == playerId;
+
+                    // Deploy if no friendly shipyard and we have enough gold
+                    if (!hasFriendlyShipyard && availableGold >= BuildingConfig.DEPLOY_SHIPYARD_COST)
                     {
-                        if (player.gold >= BuildingConfig.DEPLOY_SHIPYARD_COST)
-                        {
-                            DeployShipyardOrder deployOrder = new DeployShipyardOrder(unit.id, playerId, unit.position);
-                            orders.Add(deployOrder);
-                            player.gold -= BuildingConfig.DEPLOY_SHIPYARD_COST; // Track gold spending
-                            Debug.Log($"[AI Player {playerId}] DEPLOYING shipyard at {unit.position} (Gold: {player.gold + BuildingConfig.DEPLOY_SHIPYARD_COST} -> {player.gold})");
-                            continue; // Don't move this unit
-                        }
-                        else
-                        {
-                            Debug.Log($"[AI Player {playerId}] Unit {unit.id} on harbor at {unit.position} but not enough gold to deploy (have {player.gold}, need {BuildingConfig.DEPLOY_SHIPYARD_COST})");
-                        }
+                        DeployShipyardOrder deployOrder = new DeployShipyardOrder(unit.id, playerId, unit.position);
+                        orders.Add(deployOrder);
+                        availableGold -= BuildingConfig.DEPLOY_SHIPYARD_COST; // Track LOCAL gold spending
+                        Debug.Log($"[AI Player {playerId}] DEPLOYING shipyard at {unit.position} (Gold: {availableGold + BuildingConfig.DEPLOY_SHIPYARD_COST} -> {availableGold})");
+                        continue; // Don't move this unit
+                    }
+                    else if (!hasFriendlyShipyard)
+                    {
+                        Debug.Log($"[AI Player {playerId}] Unit {unit.id} on harbor at {unit.position} but not enough gold to deploy (have {availableGold}, need {BuildingConfig.DEPLOY_SHIPYARD_COST})");
                     }
                 }
 
+                // Unit didn't deploy, so it can move
+                unitsToMove.Add(unit);
+            }
+
+            // Strategy 2: Build ships at shipyards if we have gold left
+            // Build more aggressively - up to 10 ships total
+            foreach (Structure shipyard in myShipyards)
+            {
+                int queueCount = PlunkAndPlunder.Construction.ConstructionManager.Instance?.GetShipyardQueue(shipyard.id)?.Count ?? 0;
+                if (availableGold >= BuildingConfig.BUILD_SHIP_COST && queueCount < BuildingConfig.MAX_QUEUE_SIZE)
+                {
+                    // Build ships up to 10 total (more aggressive expansion)
+                    if (myUnits.Count < 10)
+                    {
+                        BuildShipOrder buildOrder = new BuildShipOrder(playerId, shipyard.id, shipyard.position);
+                        orders.Add(buildOrder);
+                        availableGold -= BuildingConfig.BUILD_SHIP_COST; // Track LOCAL gold spending
+                        Debug.Log($"[AI Player {playerId}] BUILDING ship at shipyard {shipyard.id} (Gold: {availableGold + BuildingConfig.BUILD_SHIP_COST} -> {availableGold})");
+                    }
+                    else
+                    {
+                        Debug.Log($"[AI Player {playerId}] Not building - already have {myUnits.Count} ships (max 10)");
+                    }
+                }
+                else if (availableGold < BuildingConfig.BUILD_SHIP_COST)
+                {
+                    Debug.Log($"[AI Player {playerId}] Not enough gold to build ship (have {availableGold}, need {BuildingConfig.BUILD_SHIP_COST})");
+                }
+            }
+
+            // Strategy 3: Move remaining units (units that didn't deploy)
+            foreach (Unit unit in unitsToMove)
+            {
                 // Find nearest target (enemy or unclaimed harbor)
                 HexCoord targetPos = FindNearestTarget(unit.position, enemyUnits, harbors, structureManager);
 
@@ -195,7 +209,8 @@ namespace PlunkAndPlunder.AI
                 foreach (Tile harbor in harbors)
                 {
                     Structure existingStructure = structureManager.GetStructureAtPosition(harbor.coord);
-                    if (existingStructure == null || existingStructure.ownerId == -1) // Harbor without shipyard or neutral
+                    // Harbor is unclaimed if no structure exists (SHIPYARD is only structure type)
+                    if (existingStructure == null)
                     {
                         int dist = position.Distance(harbor.coord);
                         if (dist < minDistance)
@@ -209,10 +224,11 @@ namespace PlunkAndPlunder.AI
             }
 
             // Priority 3: Check enemy shipyards (for conquest) - if no closer targets
+            // SHIPYARD is the only structure type, so all structures are shipyards
             List<Structure> allStructures = structureManager.GetAllStructures();
             foreach (Structure structure in allStructures)
             {
-                if (structure.type == StructureType.SHIPYARD && structure.ownerId != -1)
+                if (structure.ownerId != -1)
                 {
                     // Don't target own shipyards
                     Unit anyUnit = enemyUnits.FirstOrDefault();
