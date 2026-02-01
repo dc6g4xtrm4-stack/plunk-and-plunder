@@ -23,11 +23,8 @@ namespace PlunkAndPlunder.Simulation
     /// </summary>
     public class HeadlessSimulation : MonoBehaviour
     {
-        private GameState state;
-        private TurnResolver turnResolver;
-        private Pathfinding pathfinding;
-        private AIController aiController;
-        private ConstructionManager constructionManager;
+        private GameEngine engine;
+        private GameState state;  // Convenience reference to engine.State
 
         private StringBuilder gameLog;
         private string logFilePath;
@@ -71,11 +68,11 @@ namespace PlunkAndPlunder.Simulation
 
         private IEnumerator RunSimulationCoroutine(int numPlayers)
         {
-            // PHASE 1: Initialize game state (no UI)
+            // PHASE 1: Initialize game state using GameEngine
             Debug.Log("[HeadlessSimulation] Phase 1: Initializing game...");
 
-            bool initSuccess = false;
-            yield return InitializeHeadlessGame(numPlayers);
+            InitializeWithGameEngine(numPlayers);
+            yield return null;
 
             // Check if initialization succeeded
             if (state == null || state.playerManager == null)
@@ -100,7 +97,7 @@ namespace PlunkAndPlunder.Simulation
                 Player winner = state.playerManager.GetWinner();
                 if (winner != null)
                 {
-                    LogGameOver(winner);
+                    LogGameOver(winner.id);
                     break;
                 }
 
@@ -127,238 +124,163 @@ namespace PlunkAndPlunder.Simulation
             FinishSimulation();
         }
 
-        private IEnumerator InitializeHeadlessGame(int numPlayers)
+        private void InitializeWithGameEngine(int numPlayers)
         {
-            Debug.Log("[HeadlessSimulation] Initializing game state...");
+            Debug.Log("[HeadlessSimulation] Initializing game with GameEngine...");
 
-            // Create game state
-            state = new GameState();
-            state.playerManager = new PlayerManager();
-            state.unitManager = new UnitManager();
-            state.structureManager = new StructureManager();
-            state.turnNumber = 0;
-            state.phase = GamePhase.Planning;
+            // Create GameEngine with config
+            GameConfig config = new GameConfig
+            {
+                numSeaTiles = 500,
+                numIslands = 25,
+                minIslandSize = 4,
+                maxIslandSize = 8
+            };
+            engine = new GameEngine(config);
 
-            // Create players (all AI)
+            // Subscribe to engine events for logging
+            engine.OnStateChanged += LogStateSnapshot;
+            engine.OnEventsGenerated += LogEvents;
+            engine.OnGameWon += LogGameOver;
+
+            // Create player configs (all AI)
+            List<PlayerConfig> players = new List<PlayerConfig>();
             for (int i = 0; i < numPlayers; i++)
             {
-                Player player = state.playerManager.AddPlayer($"AI {i}", PlayerType.AI);
-                gameLog.AppendLine($"[INIT] Player {i}: {player.name} (AI) - Gold: {player.gold}");
+                players.Add(new PlayerConfig($"AI {i}", PlayerType.AI));
             }
 
-            gameLog.AppendLine();
+            // Initialize game
+            engine.InitializeGame(players);
+            state = engine.State;  // Keep reference for convenience
 
-            // Generate map
-            int mapSeed = UnityEngine.Random.Range(0, int.MaxValue);
-            state.mapSeed = mapSeed;
-
-            // Set Unity's random seed for deterministic generation
-            UnityEngine.Random.InitState(mapSeed);
-
-            MapGenerator mapGen = new MapGenerator();
-            // Use reasonable map parameters: 500 sea tiles, 25 islands, 4-8 size range, 4 players
-            state.grid = mapGen.GenerateMap(
-                numSeaTiles: 500,
-                numIslands: 25,
-                minIslandSize: 4,
-                maxIslandSize: 8,
-                numPlayers: numPlayers
-            );
-
+            // Log initialization
+            gameLog.AppendLine($"[INIT] Map generated - Seed: {state.mapSeed}");
             int seaTiles = state.grid.GetAllTiles().Count(t => t.type == TileType.SEA);
             int harborTiles = state.grid.GetAllTiles().Count(t => t.type == TileType.HARBOR);
-            int totalTiles = state.grid.GetAllTiles().Count;
-
-            gameLog.AppendLine($"[INIT] Map generated - Seed: {mapSeed}");
-            gameLog.AppendLine($"[INIT] Total tiles: {totalTiles} (Sea: {seaTiles}, Harbors: {harborTiles})");
+            gameLog.AppendLine($"[INIT] Total tiles: {state.grid.GetAllTiles().Count} (Sea: {seaTiles}, Harbors: {harborTiles})");
             gameLog.AppendLine();
 
-            // Place starting shipyards and units for each player
-            var harbors = state.grid.GetAllTiles().Where(t => t.type == TileType.HARBOR).ToList();
-
-            for (int i = 0; i < numPlayers && i < harbors.Count; i++)
+            // Log players
+            foreach (var player in state.playerManager.players)
             {
-                HexCoord harborPos = harbors[i].coord;
+                gameLog.AppendLine($"[INIT] Player {player.id}: {player.name} (AI) - Gold: {player.gold}");
+            }
+            gameLog.AppendLine();
 
-                // Create shipyard
-                Structure shipyard = state.structureManager.CreateStructure(i, harborPos, StructureType.SHIPYARD);
-                gameLog.AppendLine($"[INIT] Player {i} starting shipyard at {harborPos}");
+            // Log starting positions
+            foreach (var player in state.playerManager.players)
+            {
+                var playerShipyards = state.structureManager.GetStructuresForPlayer(player.id)
+                    .Where(s => s.type == StructureType.SHIPYARD).ToList();
+                var playerShips = state.unitManager.GetUnitsForPlayer(player.id);
 
-                // Create starting ship next to shipyard
-                var neighborCoords = harborPos.GetNeighbors();
-                Tile seaTile = null;
-                foreach (var neighborCoord in neighborCoords)
+                foreach (var shipyard in playerShipyards)
                 {
-                    var tile = state.grid.GetTile(neighborCoord);
-                    if (tile != null && tile.type == TileType.SEA)
-                    {
-                        seaTile = tile;
-                        break;
-                    }
+                    gameLog.AppendLine($"[INIT] Player {player.id} starting shipyard at {shipyard.position}");
                 }
 
-                if (seaTile != null)
+                foreach (var ship in playerShips)
                 {
-                    Unit ship = state.unitManager.CreateUnit(i, seaTile.coord, UnitType.SHIP);
-                    gameLog.AppendLine($"[INIT] Player {i} starting ship '{ship.id}' at {seaTile.coord}");
+                    gameLog.AppendLine($"[INIT] Player {player.id} starting ship '{ship.id}' at {ship.position}");
                 }
             }
 
             gameLog.AppendLine();
-
-            // Initialize systems
-            pathfinding = new Pathfinding(state.grid);
-            turnResolver = new TurnResolver(
-                state.grid,
-                state.unitManager,
-                state.playerManager,
-                state.structureManager,
-                enableLogging: false,
-                deferUnitRemoval: false  // CRITICAL: Remove dead units immediately (no TurnAnimator in headless mode)
-            );
-            aiController = new AIController(
-                state.grid,
-                state.unitManager,
-                state.playerManager,
-                state.structureManager,
-                pathfinding
-            );
-
-            // Initialize ConstructionManager
-            if (ConstructionManager.Instance == null)
-            {
-                GameObject cmObj = new GameObject("ConstructionManager");
-                constructionManager = cmObj.AddComponent<ConstructionManager>();
-            }
-            else
-            {
-                constructionManager = ConstructionManager.Instance;
-            }
-
-            constructionManager.Reset();
-
-            // CRITICAL: Inject GameState so ConstructionManager uses the correct state
-            constructionManager.Initialize(state);
-
-            // Register shipyards with construction manager
-            foreach (var shipyard in state.structureManager.GetAllStructures().Where(s => s.type == StructureType.SHIPYARD))
-            {
-                constructionManager.RegisterShipyard(shipyard.id);
-            }
-
-            Debug.Log("[HeadlessSimulation] Game initialized successfully");
             gameLog.AppendLine("[INIT] Game initialization complete");
             gameLog.AppendLine();
 
-            yield return null;
+            Debug.Log("[HeadlessSimulation] Game initialized successfully using GameEngine");
         }
 
         private IEnumerator ProcessTurnHeadless()
         {
             gameLog.AppendLine($"--- TURN {turnNumber} ---");
 
-            // Validate state
-            if (state == null || state.playerManager == null || state.unitManager == null)
-            {
-                Debug.LogError($"[HeadlessSimulation] Game state is null at turn {turnNumber}");
-                gameLog.AppendLine("[ERROR] Game state is null - stopping simulation");
-                yield break;
-            }
-
             // Log turn start state
             LogTurnState();
 
-            // PLANNING PHASE: AI generates orders
-            List<IOrder> allOrders = new List<IOrder>();
+            // Process turn using GameEngine (handles income, AI orders, resolution)
+            TurnResult result = engine.ProcessTurn();
 
-            foreach (var player in state.playerManager.players.Where(p => !p.isEliminated))
+            // Log AI orders (these were already generated and processed)
+            foreach (var player in state.playerManager.players.Where(p => !p.isEliminated && p.type == PlayerType.AI))
             {
-                List<IOrder> playerOrders = aiController.PlanTurn(player.id);
-                allOrders.AddRange(playerOrders);
-
-                // Log orders
-                foreach (var order in playerOrders)
-                {
-                    gameLog.AppendLine($"[ORDER] Player {player.id}: {GetOrderDescription(order)}");
-                }
+                // Orders already processed, just note that AI acted
+                gameLog.AppendLine($"[AI] Player {player.id} orders processed");
             }
 
-            if (allOrders.Count == 0)
+            // NEW: Handle encounters if any (new encounter system)
+            if (result.encounters.Count > 0)
             {
-                gameLog.AppendLine("[ORDER] No orders submitted this turn");
-            }
+                gameLog.AppendLine($"[ENCOUNTER_RESOLUTION] {result.encounters.Count} encounters detected, resolving...");
 
-            gameLog.AppendLine();
-
-            // RESOLUTION PHASE: Process orders
-            List<GameEvent> events = turnResolver.ResolveTurn(allOrders, turnNumber);
-
-            // CRITICAL FIX: Handle collision resolution
-            // ResolveTurn() returns early when collisions are detected
-            // We must collect yield decisions and resolve collisions manually
-            bool hasCollisions = events.Any(e => e.type == GameEventType.CollisionNeedsResolution);
-            if (hasCollisions)
-            {
-                gameLog.AppendLine("[COLLISION_RESOLUTION] Collisions detected, resolving...");
-
-                List<CollisionInfo> collisions = new List<CollisionInfo>();
-                Dictionary<string, bool> yieldDecisions = new Dictionary<string, bool>();
-
-                // Extract collision info from events
-                foreach (var evt in events)
+                foreach (var encounter in result.encounters)
                 {
-                    if (evt is CollisionNeedsResolutionEvent collisionEvent)
-                    {
-                        collisions.Add(collisionEvent.collision);
-                        gameLog.AppendLine($"[COLLISION_RESOLUTION] Collision at {collisionEvent.collision.destination} with {collisionEvent.collision.unitIds.Count} units");
-                    }
+                    string location = encounter.Type == Combat.EncounterType.ENTRY
+                        ? $"tile {encounter.TileCoord}"
+                        : $"edge {encounter.EdgeCoords?.Item1} <-> {encounter.EdgeCoords?.Item2}";
+                    gameLog.AppendLine($"[ENCOUNTER_RESOLUTION] {encounter.Type} encounter at {location} with {encounter.InvolvedUnitIds.Count} units");
                 }
 
-                // AI makes yield decisions automatically (based on health)
-                foreach (var collision in collisions)
+                // AI auto-decides for all encounters
+                engine.MakeAIEncounterDecisions(result.encounters);
+
+                // Log AI decisions
+                foreach (var encounter in result.encounters)
                 {
-                    foreach (string unitId in collision.unitIds)
+                    gameLog.AppendLine($"[ENCOUNTER_RESOLUTION] {encounter.Type} encounter decisions:");
+                    foreach (string unitId in encounter.InvolvedUnitIds)
                     {
                         Unit unit = state.unitManager.GetUnit(unitId);
                         if (unit != null)
                         {
-                            // Yield if health below 50%
-                            bool shouldYield = unit.health < (unit.maxHealth * 0.5f);
-                            yieldDecisions[unitId] = shouldYield;
-                            gameLog.AppendLine($"[COLLISION_RESOLUTION] Unit {unitId} (P{unit.ownerId}): health={unit.health}/{unit.maxHealth}, yield={shouldYield}");
+                            string decision = "";
+                            if (encounter.Type == Combat.EncounterType.PASSING)
+                            {
+                                decision = encounter.PassingDecisions[unitId].ToString();
+                            }
+                            else if (encounter.Type == Combat.EncounterType.ENTRY)
+                            {
+                                decision = encounter.EntryDecisions[unitId].ToString();
+                            }
+                            gameLog.AppendLine($"[ENCOUNTER_RESOLUTION]   Unit {unitId} (P{unit.ownerId}): health={unit.health}/{unit.maxHealth}, decision={decision}");
                         }
                     }
                 }
 
-                // Resolve collisions with AI decisions
-                List<GameEvent> collisionEvents = turnResolver.ResolveCollisionsWithYieldDecisions(
-                    collisions,
-                    yieldDecisions
-                );
-                events.AddRange(collisionEvents);
+                // Resolve encounters
+                var encounterEvents = engine.ResolveEncounters(result.encounters);
+                gameLog.AppendLine($"[ENCOUNTER_RESOLUTION] Generated {encounterEvents.Count} encounter resolution events");
+            }
+            // OLD: Backward compatibility for old collision system
+            else if (result.collisions.Count > 0)
+            {
+                gameLog.AppendLine("[COLLISION_RESOLUTION] Collisions detected, resolving...");
+
+                foreach (var collision in result.collisions)
+                {
+                    gameLog.AppendLine($"[COLLISION_RESOLUTION] Collision at {collision.destination} with {collision.unitIds.Count} units");
+                }
+
+                // Get AI yield decisions
+                var yieldDecisions = engine.GetAIYieldDecisions(result.collisions);
+
+                foreach (var decision in yieldDecisions)
+                {
+                    Unit unit = state.unitManager.GetUnit(decision.Key);
+                    if (unit != null)
+                    {
+                        gameLog.AppendLine($"[COLLISION_RESOLUTION] Unit {decision.Key} (P{unit.ownerId}): health={unit.health}/{unit.maxHealth}, yield={decision.Value}");
+                    }
+                }
+
+                // Resolve collisions
+                var collisionEvents = engine.ResolveCollisions(yieldDecisions);
                 gameLog.AppendLine($"[COLLISION_RESOLUTION] Generated {collisionEvents.Count} collision resolution events");
-
-                // Resolve combat after movement
-                List<GameEvent> combatEvents = turnResolver.ResolveCombatAfterMovement();
-                events.AddRange(combatEvents);
-                gameLog.AppendLine($"[COLLISION_RESOLUTION] Generated {combatEvents.Count} combat events");
             }
 
-            // Log all events
-            foreach (var evt in events)
-            {
-                gameLog.AppendLine($"[EVENT] {evt.type}: {evt.message}");
-            }
-
-            if (events.Count == 0)
-            {
-                gameLog.AppendLine("[EVENT] No events this turn");
-            }
-
-            gameLog.AppendLine();
-
-            // NOTE: Construction is processed by TurnResolver.ResolveTurn() at the start of turn
-            // No need to call ProcessTurn() again here - it would be a duplicate
+            // Events are already logged via OnEventsGenerated event handler
 
             // Log turn end state
             LogTurnEndState();
@@ -400,7 +322,7 @@ namespace PlunkAndPlunder.Simulation
             // Log structure states
             foreach (var structure in state.structureManager.GetAllStructures())
             {
-                var queue = constructionManager?.GetShipyardQueue(structure.id);
+                var queue = ConstructionManager.Instance?.GetShipyardQueue(structure.id);
                 int queueCount = queue?.Count ?? 0;
                 gameLog.AppendLine($"  Structure {structure.id} (P{structure.ownerId}): type={structure.type}, pos={structure.position}, queue={queueCount}");
             }
@@ -431,8 +353,11 @@ namespace PlunkAndPlunder.Simulation
             }
         }
 
-        private void LogGameOver(Player winner)
+        private void LogGameOver(int winnerId)
         {
+            Player winner = state.playerManager.GetPlayer(winnerId);
+            if (winner == null) return;
+
             gameLog.AppendLine();
             gameLog.AppendLine("=".PadRight(100, '='));
             gameLog.AppendLine("GAME OVER");
@@ -443,6 +368,28 @@ namespace PlunkAndPlunder.Simulation
 
             // Log final statistics
             LogFinalStatistics();
+        }
+
+        // Event handlers for GameEngine
+        private void LogStateSnapshot(GameState updatedState)
+        {
+            // State is updated - nothing to log here, handled elsewhere
+        }
+
+        private void LogEvents(List<GameEvent> events)
+        {
+            // Log all events
+            foreach (var evt in events)
+            {
+                gameLog.AppendLine($"[EVENT] {evt.type}: {evt.message}");
+            }
+
+            if (events.Count == 0)
+            {
+                gameLog.AppendLine("[EVENT] No events this turn");
+            }
+
+            gameLog.AppendLine();
         }
 
         private void LogFinalStatistics()

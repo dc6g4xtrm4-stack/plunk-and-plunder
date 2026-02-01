@@ -15,7 +15,9 @@ namespace PlunkAndPlunder.Core
     public class GameState
     {
         public int turnNumber;
+        public int currentTurn { get { return turnNumber; } set { turnNumber = value; } }
         public GamePhase phase;
+        public GamePhase currentPhase { get { return phase; } set { phase = value; } }
         public int mapSeed;
 
         // Core data
@@ -35,6 +37,10 @@ namespace PlunkAndPlunder.Core
         // Multi-turn combat data
         public List<OngoingCombat> ongoingCombats;
 
+        // Encounter system data (NEW)
+        public List<Combat.Encounter> activeEncounters;
+        public Dictionary<HexCoord, Combat.Encounter> contestedTiles;
+
         public GameState()
         {
             turnNumber = 0;
@@ -48,6 +54,8 @@ namespace PlunkAndPlunder.Core
             pendingCollisions = new List<CollisionInfo>();
             collisionYieldDecisions = new Dictionary<string, bool>();
             ongoingCombats = new List<OngoingCombat>();
+            activeEncounters = new List<Combat.Encounter>();
+            contestedTiles = new Dictionary<HexCoord, Combat.Encounter>();
         }
     }
 
@@ -99,6 +107,7 @@ namespace PlunkAndPlunder.Core
         Resolving,          // Turn is being resolved
         CollisionResolution,// Waiting for players to make yield decisions
         Animating,          // Animating turn resolution events
+        Replay,             // Replay mode - playing back simulation log
         GameOver
     }
 }

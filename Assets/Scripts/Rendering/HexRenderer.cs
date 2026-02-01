@@ -251,6 +251,44 @@ namespace PlunkAndPlunder.Rendering
             tileObjects.Clear();
         }
 
+        /// <summary>
+        /// Updates visual indicators for contested tiles (NEW ENCOUNTER SYSTEM).
+        /// Adds pulsing red borders to tiles that are currently contested.
+        /// </summary>
+        public void UpdateContestedTiles(Dictionary<HexCoord, Combat.Encounter> contestedTiles)
+        {
+            // First, remove all existing contested tile pulses
+            foreach (var kvp in tileObjects)
+            {
+                ContestedTilePulse pulse = kvp.Value.GetComponent<ContestedTilePulse>();
+                if (pulse != null)
+                {
+                    Destroy(pulse);
+                }
+            }
+
+            // Add pulse component to contested tiles
+            foreach (var kvp in contestedTiles)
+            {
+                HexCoord coord = kvp.Key;
+                Combat.Encounter encounter = kvp.Value;
+
+                if (tileObjects.ContainsKey(coord))
+                {
+                    GameObject tileObj = tileObjects[coord];
+                    ContestedTilePulse pulse = tileObj.GetComponent<ContestedTilePulse>();
+
+                    if (pulse == null)
+                    {
+                        pulse = tileObj.AddComponent<ContestedTilePulse>();
+                        pulse.Initialize(hexSize);
+                    }
+
+                    Debug.Log($"[HexRenderer] Added contested tile visual to {coord} with {encounter.InvolvedUnitIds.Count} units");
+                }
+            }
+        }
+
         private void OnDestroy()
         {
             ClearTiles();

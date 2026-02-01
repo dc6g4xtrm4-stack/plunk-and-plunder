@@ -17,9 +17,9 @@ namespace PlunkAndPlunder.Resolution
         private bool isAnimating = false;
         private bool isPaused = false;
 
-        public float hexStepDelay = 0.5f; // Time to move one hex (increased for visibility)
-        public float combatPauseDelay = 1.0f; // Time to pause for combat
-        public float eventPauseDelay = 0.5f; // Time to pause for other events
+        public float hexStepDelay = 0.1f; // Time to move one hex (fast for testing)
+        public float combatPauseDelay = 0.2f; // Time to pause for combat
+        public float eventPauseDelay = 0.05f; // Time to pause for other events (very fast)
 
         public event Action<GameState> OnAnimationStep; // Fired after each animation step
         public event Action OnAnimationComplete; // Fired when all animations done
@@ -159,6 +159,27 @@ namespace PlunkAndPlunder.Resolution
                         yield return new WaitForSeconds(eventPauseDelay);
                         break;
 
+                    // NEW: Encounter system events
+                    case EncounterDetectedEvent encounterDetectedEvent:
+                        yield return AnimateEncounterDetected(encounterDetectedEvent, state);
+                        break;
+
+                    case EncounterNeedsResolutionEvent encounterNeedsResolutionEvent:
+                        // Skip animation - this is handled by the encounter resolution UI
+                        break;
+
+                    case EncounterResolvedEvent encounterResolvedEvent:
+                        yield return AnimateEncounterResolved(encounterResolvedEvent, state);
+                        break;
+
+                    case ContestedTileCreatedEvent contestedTileCreatedEvent:
+                        yield return AnimateContestedTileCreated(contestedTileCreatedEvent, state);
+                        break;
+
+                    case ContestedTileResolvedEvent contestedTileResolvedEvent:
+                        yield return AnimateContestedTileResolved(contestedTileResolvedEvent, state);
+                        break;
+
                     default:
                         // Instant events - just pause briefly
                         yield return new WaitForSeconds(eventPauseDelay);
@@ -237,7 +258,8 @@ namespace PlunkAndPlunder.Resolution
                 // Fire animation step event so rendering can update
                 if (anyUnitMoved)
                 {
-                    Debug.Log($"[TurnAnimator] Step {step} complete, firing OnAnimationStep event");
+                    // Verbose logging disabled for performance (called every animation frame)
+                    // Debug.Log($"[TurnAnimator] Step {step} complete, firing OnAnimationStep event");
                     OnAnimationStep?.Invoke(state);
 
                     // Wait before next step
@@ -453,6 +475,72 @@ namespace PlunkAndPlunder.Resolution
             {
                 yield return new WaitForSeconds(0.1f);
             }
+        }
+
+        // ====================
+        // NEW ENCOUNTER SYSTEM ANIMATION METHODS
+        // ====================
+
+        /// <summary>
+        /// Animates an encounter detection event (flash/indicator at encounter location).
+        /// </summary>
+        private IEnumerator AnimateEncounterDetected(EncounterDetectedEvent encounterEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating encounter detected: {encounterEvent.encounter}");
+
+            // Brief pause to indicate encounter
+            yield return new WaitForSeconds(eventPauseDelay);
+
+            // TODO: Could add visual effect at encounter location (flash, icon, etc.)
+            // For now, just log and pause
+        }
+
+        /// <summary>
+        /// Animates an encounter resolution event (show outcome).
+        /// </summary>
+        private IEnumerator AnimateEncounterResolved(EncounterResolvedEvent encounterEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating encounter resolved: {encounterEvent.resolution}");
+
+            // Brief pause to show resolution
+            yield return new WaitForSeconds(eventPauseDelay);
+
+            // TODO: Could add visual feedback (checkmark, explosion, etc.)
+            // For now, just log and pause
+        }
+
+        /// <summary>
+        /// Animates a contested tile creation event (trigger red pulse visual).
+        /// </summary>
+        private IEnumerator AnimateContestedTileCreated(ContestedTileCreatedEvent contestedEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating contested tile created at {contestedEvent.tileCoord}");
+
+            // Update contested tile visuals on HexRenderer
+            if (hexRenderer != null)
+            {
+                hexRenderer.UpdateContestedTiles(state.contestedTiles);
+            }
+
+            // Use combat pause delay for contested tile creation (it's a significant event)
+            yield return new WaitForSeconds(combatPauseDelay);
+        }
+
+        /// <summary>
+        /// Animates a contested tile resolution event (remove red pulse, show winner).
+        /// </summary>
+        private IEnumerator AnimateContestedTileResolved(ContestedTileResolvedEvent resolvedEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating contested tile resolved at {resolvedEvent.tileCoord}");
+
+            // Update contested tile visuals on HexRenderer (remove pulse)
+            if (hexRenderer != null)
+            {
+                hexRenderer.UpdateContestedTiles(state.contestedTiles);
+            }
+
+            // Brief pause to show resolution
+            yield return new WaitForSeconds(eventPauseDelay);
         }
     }
 }

@@ -148,8 +148,12 @@ namespace PlunkAndPlunder.Core
             // Resolve all orders
             var resolutionEvents = ResolveOrders();
 
-            // Check for collisions
+            // Check for collisions (OLD system)
             var collisions = ExtractCollisions(resolutionEvents);
+
+            // NEW: Check for encounters (NEW system)
+            ExtractEncounters(resolutionEvents);
+            var encounters = State.activeEncounters;
 
             State.eventHistory.AddRange(resolutionEvents);
             OnEventsGenerated?.Invoke(resolutionEvents);
@@ -167,6 +171,7 @@ namespace PlunkAndPlunder.Core
                 turnNumber = State.turnNumber,
                 events = resolutionEvents,
                 collisions = collisions,
+                encounters = new List<Combat.Encounter>(encounters),
                 winner = winner
             };
         }
@@ -193,8 +198,12 @@ namespace PlunkAndPlunder.Core
             // Resolve all orders
             var resolutionEvents = ResolveOrders();
 
-            // Check for collisions
+            // Check for collisions (OLD system)
             var collisions = ExtractCollisions(resolutionEvents);
+
+            // NEW: Check for encounters (NEW system)
+            ExtractEncounters(resolutionEvents);
+            var encounters = State.activeEncounters;
 
             // Combine events
             var allEvents = new List<GameEvent>();
@@ -219,6 +228,7 @@ namespace PlunkAndPlunder.Core
                 turnNumber = State.turnNumber,
                 events = allEvents,
                 collisions = collisions,
+                encounters = new List<Combat.Encounter>(encounters),
                 winner = winner
             };
         }
@@ -268,6 +278,95 @@ namespace PlunkAndPlunder.Core
             }
 
             return decisions;
+        }
+
+        // ====================
+        // NEW ENCOUNTER SYSTEM METHODS
+        // ====================
+
+        /// <summary>
+        /// AI automatically decides for all encounters involving AI-controlled units.
+        /// Logic: Yield if health < 50%, otherwise attack.
+        /// </summary>
+        public void MakeAIEncounterDecisions(List<Combat.Encounter> encounters)
+        {
+            foreach (var encounter in encounters)
+            {
+                foreach (string unitId in encounter.InvolvedUnitIds)
+                {
+                    Unit unit = State.unitManager.GetUnit(unitId);
+                    if (unit == null) continue;
+
+                    Player player = State.playerManager.GetPlayer(unit.ownerId);
+                    if (player == null || player.type == PlayerType.Human) continue;
+
+                    // AI decision logic: yield/proceed if health below 50%, attack otherwise
+                    bool shouldYield = unit.health < (unit.maxHealth * 0.5f);
+
+                    if (encounter.Type == Combat.EncounterType.PASSING)
+                    {
+                        var decision = shouldYield ? Combat.PassingEncounterDecision.PROCEED : Combat.PassingEncounterDecision.ATTACK;
+                        encounter.RecordPassingDecision(unitId, decision);
+
+                        Debug.Log($"[GameEngine] AI unit {unitId} decided {decision} for PASSING encounter (health: {unit.health}/{unit.maxHealth})");
+                    }
+                    else if (encounter.Type == Combat.EncounterType.ENTRY)
+                    {
+                        var decision = shouldYield ? Combat.EntryEncounterDecision.YIELD : Combat.EntryEncounterDecision.ATTACK;
+                        encounter.RecordEntryDecision(unitId, decision);
+
+                        Debug.Log($"[GameEngine] AI unit {unitId} decided {decision} for ENTRY encounter (health: {unit.health}/{unit.maxHealth})");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Resolves all encounters with player decisions and updates game state.
+        /// Returns all resolution events.
+        /// </summary>
+        public List<GameEvent> ResolveEncounters(List<Combat.Encounter> encounters)
+        {
+            List<GameEvent> allEvents = new List<GameEvent>();
+
+            // Resolve encounters using TurnResolver
+            var encounterEvents = turnResolver.ResolveEncountersWithDecisions(encounters);
+            allEvents.AddRange(encounterEvents);
+
+            // Update contested tiles in game state
+            State.contestedTiles.Clear();
+            foreach (var encounter in encounters)
+            {
+                if (encounter.IsContested && encounter.TileCoord.HasValue)
+                {
+                    State.contestedTiles[encounter.TileCoord.Value] = encounter;
+                }
+            }
+
+            // Continue with adjacent combat resolution (existing logic)
+            var adjacentCombatEvents = turnResolver.ResolveAdjacentCombat();
+            allEvents.AddRange(adjacentCombatEvents);
+
+            return allEvents;
+        }
+
+        /// <summary>
+        /// Extracts encounters from resolution events and stores them in game state.
+        /// Replaces the old ExtractCollisions method.
+        /// </summary>
+        public void ExtractEncounters(List<GameEvent> events)
+        {
+            State.activeEncounters.Clear();
+
+            foreach (var evt in events)
+            {
+                if (evt is EncounterNeedsResolutionEvent encounterEvent)
+                {
+                    State.activeEncounters.AddRange(encounterEvent.encounters);
+                }
+            }
+
+            Debug.Log($"[GameEngine] Extracted {State.activeEncounters.Count} encounters from events");
         }
 
         // Public accessors for UI systems that need them
@@ -418,7 +517,8 @@ namespace PlunkAndPlunder.Core
     {
         public int turnNumber;
         public List<GameEvent> events;
-        public List<CollisionInfo> collisions;
+        public List<CollisionInfo> collisions; // OLD: backward compatibility
+        public List<Combat.Encounter> encounters; // NEW: encounter system
         public Player winner;
     }
 }

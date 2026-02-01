@@ -30,16 +30,16 @@ namespace PlunkAndPlunder.Core
         // Simulation support: skip animation for headless AI testing
         public bool skipAnimation = false;
 
-        // Systems
-        private TurnResolver turnResolver;
+        // Core game engine (deterministic logic)
+        private GameEngine engine;
+
+        // UI/Rendering systems (Unity-specific)
         private TurnAnimator turnAnimator;
-        private Pathfinding pathfinding;
-        private OrderValidator orderValidator;
-        private AIController aiController;
         private NetworkManager networkManager;
         private ConflictResolutionUI conflictResolutionUI;
         private CombatResultsUI combatResultsUI;
         private CollisionYieldUI collisionYieldUI;
+        private EncounterUI encounterUI; // NEW: Encounter system UI
         private DiceCombatUI diceCombatUI;
         private PlayerStatsHUD playerStatsHUD;
 
@@ -92,40 +92,25 @@ namespace PlunkAndPlunder.Core
         {
             Debug.Log($"[GameManager] Starting offline game with {numPlayers} players");
 
-            // RESET GAME STATE - clear everything from previous games
-            state = new GameState();
-            state.playerManager = new PlayerManager();
-            state.unitManager = new UnitManager();
-            state.structureManager = new StructureManager();
+            // Initialize GameEngine with config
+            engine = new GameEngine(config);
 
-            // Reset ConstructionManager
-            if (ConstructionManager.Instance != null)
-            {
-                ConstructionManager.Instance.Reset();
-                // CRITICAL: Inject GameState so ConstructionManager uses the correct state
-                ConstructionManager.Instance.Initialize(state);
-            }
-
-            // Setup players
-            state.playerManager.AddPlayer("Player 1", PlayerType.Human);
+            // Setup player configs
+            List<PlayerConfig> players = new List<PlayerConfig>();
+            players.Add(new PlayerConfig("Player 1", PlayerType.Human));
             for (int i = 1; i < numPlayers; i++)
             {
-                state.playerManager.AddPlayer($"AI {i}", PlayerType.AI);
+                players.Add(new PlayerConfig($"AI {i}", PlayerType.AI));
             }
 
-            // Generate map with player start islands
-            int seed = debugMapSeed != 0 ? debugMapSeed : UnityEngine.Random.Range(0, int.MaxValue);
-            state.mapSeed = seed;
-            MapGenerator mapGen = new MapGenerator(seed);
-            state.grid = mapGen.GenerateMap(config.numSeaTiles, config.numIslands, config.minIslandSize, config.maxIslandSize, numPlayers);
+            // Initialize game using engine (handles map gen, player setup, starting units)
+            int? seed = debugMapSeed != 0 ? debugMapSeed : (int?)null;
+            engine.InitializeGame(players, seed);
+
+            // Get reference to state for convenience
+            state = engine.State;
 
             Debug.Log($"[GameManager] Map generated with {state.grid.playerStartIslands.Count} player start islands");
-
-            // Initialize systems
-            pathfinding = new Pathfinding(state.grid);
-            orderValidator = new OrderValidator(state.grid, state.unitManager, state.structureManager, state.playerManager);
-            turnResolver = new TurnResolver(state.grid, state.unitManager, state.playerManager, state.structureManager, enableDeterministicLogging);
-            aiController = new AIController(state.grid, state.unitManager, state.playerManager, state.structureManager, pathfinding);
 
             // Initialize turn animator (add component if not present)
             turnAnimator = GetComponent<TurnAnimator>();
@@ -140,7 +125,7 @@ namespace PlunkAndPlunder.Core
             turnAnimator.OnCombatOccurred += HandleCombatOccurred;
 
             // Initialize conflict resolution UI and combat results UI
-            Canvas canvas = FindObjectOfType<Canvas>();
+            Canvas canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
             {
                 GameObject conflictUIObj = new GameObject("ConflictResolutionUI");
@@ -158,6 +143,12 @@ namespace PlunkAndPlunder.Core
                 collisionYieldUI = collisionYieldUIObj.AddComponent<CollisionYieldUI>();
                 collisionYieldUI.Initialize(0); // Local player ID (human player is always 0 in offline mode)
 
+                // NEW: Initialize EncounterUI
+                GameObject encounterUIObj = new GameObject("EncounterUI");
+                encounterUIObj.transform.SetParent(canvas.transform, false);
+                encounterUI = encounterUIObj.AddComponent<EncounterUI>();
+                encounterUI.Initialize(0); // Local player ID (human player is always 0 in offline mode)
+
                 GameObject diceCombatUIObj = new GameObject("DiceCombatUI");
                 diceCombatUIObj.transform.SetParent(canvas.transform, false);
                 diceCombatUI = diceCombatUIObj.AddComponent<DiceCombatUI>();
@@ -169,14 +160,7 @@ namespace PlunkAndPlunder.Core
                 playerStatsHUD.Initialize();
             }
 
-            // Place harbors
-            PlaceHarbors();
-
-            // Place starting shipyards for each player (must be before units)
-            PlaceStartingShipyards();
-
-            // Place starting units for each player near their shipyards
-            PlaceStartingUnits();
+            // Initialization (map, structures, units) already handled by engine.InitializeGame()
 
             // Trigger initial render
             OnGameStateUpdated?.Invoke(state);
@@ -192,105 +176,7 @@ namespace PlunkAndPlunder.Core
             ChangePhase(GamePhase.Planning);
         }
 
-        private void PlaceStartingUnits()
-        {
-            Debug.Log($"[GameManager] ===== PLACING STARTING UNITS (3 ships per player) =====");
-
-            // Place 3 starting ships for each player using their start island spawn positions
-            for (int i = 0; i < state.playerManager.players.Count; i++)
-            {
-                Player player = state.playerManager.players[i];
-
-                if (i >= state.grid.playerStartIslands.Count)
-                {
-                    Debug.LogError($"[GameManager] No start island found for player {player.id}");
-                    continue;
-                }
-
-                PlayerStartIsland startIsland = state.grid.playerStartIslands[i];
-
-                Debug.Log($"[GameManager] Player {player.id} ({player.name}) start island has {startIsland.shipSpawnPositions.Count} spawn positions");
-
-                // Place 3 ships at the designated spawn positions
-                int shipsToPlace = Mathf.Min(3, startIsland.shipSpawnPositions.Count);
-                for (int j = 0; j < shipsToPlace; j++)
-                {
-                    HexCoord spawnPos = startIsland.shipSpawnPositions[j];
-                    Unit ship = state.unitManager.CreateUnit(player.id, spawnPos, UnitType.SHIP);
-                    Debug.Log($"[GameManager]   Ship {ship.id} spawned at {spawnPos}");
-                }
-
-                Debug.Log($"[GameManager] Player {player.id} starts with {shipsToPlace} ships near shipyard at {startIsland.shipyardPosition}");
-            }
-
-            Debug.Log($"[GameManager] Placed {state.unitManager.units.Count} total starting units");
-        }
-
-        private void PlaceHarbors()
-        {
-            Debug.Log($"[GameManager] ===== PLACING HARBOUR STRUCTURES =====");
-
-            // Harbors are already part of the map as HARBOR tiles
-            // Create neutral harbor structures for ALL harbours on the map (including player start islands)
-            List<Tile> harborTiles = state.grid.GetTilesOfType(TileType.HARBOR);
-
-            foreach (Tile harborTile in harborTiles)
-            {
-                // Create neutral harbour structure (will be converted to shipyard for player start harbours)
-                state.structureManager.CreateStructure(-1, harborTile.coord, StructureType.HARBOR);
-            }
-
-            Debug.Log($"[GameManager] Placed {harborTiles.Count} neutral harbour structures");
-        }
-
-        private void PlaceStartingShipyards()
-        {
-            Debug.Log($"[GameManager] ===== PLACING STARTING SHIPYARDS (using player start islands) =====");
-
-            int shipyardsPlaced = 0;
-
-            // Use player start islands to place shipyards
-            for (int i = 0; i < state.playerManager.players.Count; i++)
-            {
-                Player player = state.playerManager.players[i];
-
-                if (i >= state.grid.playerStartIslands.Count)
-                {
-                    Debug.LogError($"[GameManager] No start island found for player {player.id}");
-                    continue;
-                }
-
-                PlayerStartIsland startIsland = state.grid.playerStartIslands[i];
-                HexCoord shipyardCoord = startIsland.shipyardPosition;
-
-                Debug.Log($"[GameManager] Player {player.id} ({player.name}) start island: {startIsland.landTiles.Count} land, {startIsland.harbourTiles.Count} harbours, shipyard at {shipyardCoord}");
-
-                // Get the existing harbor structure at the shipyard position and CONVERT it to a shipyard
-                Structure harbor = state.structureManager.GetStructureAtPosition(shipyardCoord);
-                if (harbor != null && harbor.type == StructureType.HARBOR)
-                {
-                    // Convert the harbor to a shipyard by changing its type and owner
-                    harbor.type = StructureType.SHIPYARD;
-                    harbor.ownerId = player.id;
-
-                    // Register with ConstructionManager
-                    if (ConstructionManager.Instance != null)
-                    {
-                        ConstructionManager.Instance.RegisterShipyard(harbor.id);
-                    }
-
-                    shipyardsPlaced++;
-
-                    Debug.Log($"[GameManager]   Shipyard structure {harbor.id} created at {shipyardCoord} (converted from harbour)");
-                }
-                else
-                {
-                    Debug.LogWarning($"[GameManager] Could not find harbor structure at {shipyardCoord} for player {player.id}");
-                }
-            }
-
-            Debug.Log($"[GameManager] Placed {shipyardsPlaced} starting shipyards on player start islands");
-        }
+        // Initialization methods moved to GameInitializer for shared use across game modes
 
         public void ChangePhase(GamePhase newPhase)
         {
@@ -305,7 +191,7 @@ namespace PlunkAndPlunder.Core
             switch (newPhase)
             {
                 case GamePhase.Planning:
-                    StartPlanningPhase();
+                    StartCoroutine(StartPlanningPhaseAsync());
                     break;
 
                 case GamePhase.Resolving:
@@ -318,29 +204,22 @@ namespace PlunkAndPlunder.Core
             }
         }
 
-        private void StartPlanningPhase()
+        private System.Collections.IEnumerator StartPlanningPhaseAsync()
         {
-            state.turnNumber++;
-            state.pendingOrders.Clear();
+            // Use engine to start turn (advances turn, awards income, processes construction)
+            List<GameEvent> events = engine.StartTurn();
 
             GameLogger.LogTurnStart(state.turnNumber);
 
-            // Reset ready status and award gold
+            // Log income events
             foreach (Player player in state.playerManager.players)
             {
-                player.isReady = false;
-
-                // Award gold: 100 doubloons per shipyard per turn
                 if (!player.isEliminated)
                 {
                     int shipyardCount = state.structureManager.GetStructuresForPlayer(player.id)
                         .FindAll(s => s.type == Structures.StructureType.SHIPYARD).Count;
-
-                    int goldEarned = shipyardCount * 100;
-                    player.gold += goldEarned;
-
-                    Debug.Log($"[GameManager] Player {player.id} earned {goldEarned} gold from {shipyardCount} shipyard(s). Total: {player.gold}");
-                    GameLogger.LogPlayerAction(player.id, $"Earned {goldEarned} gold from {shipyardCount} shipyard(s). Total: {player.gold}");
+                    Debug.Log($"[GameManager] Player {player.id} has {player.gold} gold from {shipyardCount} shipyard(s)");
+                    GameLogger.LogPlayerAction(player.id, $"Gold: {player.gold} from {shipyardCount} shipyard(s)");
                 }
             }
 
@@ -388,13 +267,18 @@ namespace PlunkAndPlunder.Core
                 InitializePlayerView();
             }
 
-            // Trigger AI planning
+            // Trigger AI planning (use engine's AI controller)
+            // Run async with yields between players to prevent UI freeze
+            AIController aiController = engine.GetAIController();
             if (aiController != null)
             {
                 foreach (Player aiPlayer in state.playerManager.GetAIPlayers())
                 {
                     List<IOrder> aiOrders = aiController.PlanTurn(aiPlayer.id);
                     SubmitOrders(aiPlayer.id, aiOrders);
+
+                    // Yield to allow UI to update between AI players
+                    yield return null;
                 }
             }
         }
@@ -405,52 +289,13 @@ namespace PlunkAndPlunder.Core
             if (player == null || player.isEliminated)
                 return;
 
-            // Validate orders
-            List<IOrder> validOrders = new List<IOrder>();
-            foreach (IOrder order in orders)
-            {
-                bool isValid = false;
-                string error = "";
+            // Use engine to validate and submit orders
+            bool allReady = engine.SubmitOrders(playerId, orders);
 
-                switch (order)
-                {
-                    case MoveOrder moveOrder:
-                        isValid = orderValidator.ValidateMoveOrder(moveOrder, out error);
-                        break;
-                    case DeployShipyardOrder deployOrder:
-                        isValid = orderValidator.ValidateDeployShipyardOrder(deployOrder, out error);
-                        break;
-                    case BuildShipOrder buildOrder:
-                        isValid = orderValidator.ValidateBuildShipOrder(buildOrder, out error);
-                        break;
-                    case RepairShipOrder repairOrder:
-                        isValid = orderValidator.ValidateRepairShipOrder(repairOrder, out error);
-                        break;
-                    case UpgradeShipOrder upgradeOrder:
-                        isValid = orderValidator.ValidateUpgradeShipOrder(upgradeOrder, out error);
-                        break;
-                    case AttackShipyardOrder attackOrder:
-                        isValid = orderValidator.ValidateAttackShipyardOrder(attackOrder, out error);
-                        break;
-                }
-
-                if (isValid)
-                {
-                    validOrders.Add(order);
-                }
-                else
-                {
-                    Debug.LogWarning($"[GameManager] Invalid {order.GetOrderType()} order from Player {playerId}: {error}");
-                }
-            }
-
-            state.pendingOrders[playerId] = validOrders;
-            player.isReady = true;
-
-            Debug.Log($"[GameManager] Player {playerId} submitted {validOrders.Count} orders");
+            Debug.Log($"[GameManager] Player {playerId} submitted orders (validated by engine)");
 
             // Check if all players ready
-            if (state.playerManager.AllPlayersReady())
+            if (allReady)
             {
                 ChangePhase(GamePhase.Resolving);
             }
@@ -460,45 +305,42 @@ namespace PlunkAndPlunder.Core
         {
             Debug.Log($"[GameManager] Resolving turn {state.turnNumber}");
 
-            // Collect all orders
-            List<IOrder> allOrders = new List<IOrder>();
-            foreach (var kvp in state.pendingOrders)
+            // Use engine to resolve turn (generates AI orders for non-ready players, resolves all orders)
+            TurnResult result = engine.ResolveTurn();
+
+            Debug.Log($"[GameManager] Turn resolved with {result.events.Count} events");
+
+            OnTurnResolved?.Invoke(result.events);
+
+            // NEW: Check for encounters first (new system)
+            if (result.encounters.Count > 0)
             {
-                allOrders.AddRange(kvp.Value);
-            }
+                Debug.Log($"[GameManager] {result.encounters.Count} encounter(s) detected, waiting for player decisions");
+                ChangePhase(GamePhase.CollisionResolution); // Reuse collision resolution phase
 
-            // Resolve
-            List<GameEvent> events = turnResolver.ResolveTurn(allOrders, state.turnNumber);
-            state.eventHistory.AddRange(events);
+                // Extract encounters into game state
+                engine.ExtractEncounters(result.events);
 
-            Debug.Log($"[GameManager] Turn resolved with {events.Count} events");
-
-            OnTurnResolved?.Invoke(events);
-
-            // Check if any collisions need resolution
-            bool hasCollisions = false;
-            state.pendingCollisions.Clear();
-
-            foreach (GameEvent evt in events)
-            {
-                if (evt is CollisionNeedsResolutionEvent collisionEvent)
+                // Show encounter UI for players to make decisions
+                if (encounterUI != null)
                 {
-                    hasCollisions = true;
-                    state.pendingCollisions.Add(collisionEvent.collision);
+                    encounterUI.ShowEncounters(result.encounters);
                 }
-            }
 
-            // If collisions detected, transition to collision resolution phase
-            if (hasCollisions)
+                // AI players automatically make decisions
+                MakeAIEncounterDecisions();
+            }
+            // OLD: Backward compatibility for old collision system
+            else if (result.collisions.Count > 0)
             {
-                Debug.Log($"[GameManager] {state.pendingCollisions.Count} collision(s) detected, waiting for yield decisions");
+                Debug.Log($"[GameManager] {result.collisions.Count} collision(s) detected, waiting for yield decisions");
                 state.collisionYieldDecisions.Clear();
                 ChangePhase(GamePhase.CollisionResolution);
 
                 // Show collision yield UI for players to make decisions
                 if (collisionYieldUI != null)
                 {
-                    collisionYieldUI.ShowCollisions(state.pendingCollisions);
+                    collisionYieldUI.ShowCollisions(result.collisions);
                 }
 
                 // AI players automatically make decisions
@@ -506,8 +348,8 @@ namespace PlunkAndPlunder.Core
             }
             else
             {
-                // No collisions, proceed to animation (or skip if headless)
-                Debug.Log($"[GameManager] No collisions detected, proceeding to animation with {events.Count} events");
+                // No collisions/encounters, proceed to animation (or skip if headless)
+                Debug.Log($"[GameManager] No collisions or encounters detected, proceeding to animation with {result.events.Count} events");
                 ChangePhase(GamePhase.Animating);
 
                 if (skipAnimation)
@@ -518,7 +360,7 @@ namespace PlunkAndPlunder.Core
                 }
                 else
                 {
-                    turnAnimator.AnimateEvents(events, state);
+                    turnAnimator.AnimateEvents(result.events, state);
                 }
             }
         }
@@ -567,6 +409,99 @@ namespace PlunkAndPlunder.Core
                 ChangePhase(GamePhase.Planning);
             }
         }
+
+        // ====================
+        // NEW ENCOUNTER SYSTEM METHODS
+        // ====================
+
+        /// <summary>
+        /// Submit an encounter decision for a unit involved in an encounter.
+        /// </summary>
+        public void SubmitEncounterDecision(string unitId, Combat.Encounter encounter, bool isAttacking)
+        {
+            if (state.phase != GamePhase.CollisionResolution)
+            {
+                Debug.LogWarning($"[GameManager] Cannot submit encounter decision - not in CollisionResolution phase");
+                return;
+            }
+
+            // Record decision based on encounter type
+            if (encounter.Type == Combat.EncounterType.PASSING)
+            {
+                var decision = isAttacking ? Combat.PassingEncounterDecision.ATTACK : Combat.PassingEncounterDecision.PROCEED;
+                encounter.RecordPassingDecision(unitId, decision);
+                Debug.Log($"[GameManager] Unit {unitId} PASSING decision: {decision}");
+            }
+            else if (encounter.Type == Combat.EncounterType.ENTRY)
+            {
+                var decision = isAttacking ? Combat.EntryEncounterDecision.ATTACK : Combat.EntryEncounterDecision.YIELD;
+                encounter.RecordEntryDecision(unitId, decision);
+                Debug.Log($"[GameManager] Unit {unitId} ENTRY decision: {decision}");
+            }
+
+            // Check if all decisions are collected
+            if (AllEncounterDecisionsCollected())
+            {
+                ContinueResolutionWithEncounterDecisions();
+            }
+        }
+
+        private bool AllEncounterDecisionsCollected()
+        {
+            foreach (var encounter in state.activeEncounters)
+            {
+                if (encounter.AwaitingPlayerChoices)
+                {
+                    Debug.Log($"[GameManager] Still waiting for decisions on encounter {encounter.Id}");
+                    return false;
+                }
+            }
+
+            Debug.Log($"[GameManager] All encounter decisions collected!");
+            return true;
+        }
+
+        private void MakeAIEncounterDecisions()
+        {
+            engine.MakeAIEncounterDecisions(state.activeEncounters);
+
+            // Check if all decisions are now collected (might be all-AI encounter)
+            if (AllEncounterDecisionsCollected())
+            {
+                ContinueResolutionWithEncounterDecisions();
+            }
+        }
+
+        private void ContinueResolutionWithEncounterDecisions()
+        {
+            Debug.Log($"[GameManager] All encounter decisions collected, resolving encounters");
+
+            // Use engine to resolve encounters with decisions
+            List<GameEvent> encounterEvents = engine.ResolveEncounters(state.activeEncounters);
+
+            OnTurnResolved?.Invoke(encounterEvents);
+
+            // Clear encounter data
+            state.activeEncounters.Clear();
+
+            // Proceed to animation phase
+            ChangePhase(GamePhase.Animating);
+
+            if (skipAnimation)
+            {
+                // Headless mode: skip animation and immediately complete turn
+                Debug.Log("[GameManager] Skipping animation after encounter resolution (headless mode)");
+                HandleAnimationComplete();
+            }
+            else
+            {
+                turnAnimator.AnimateEvents(encounterEvents, state);
+            }
+        }
+
+        // ====================
+        // OLD COLLISION SYSTEM METHODS (backward compatibility)
+        // ====================
 
         /// <summary>
         /// Submit a yield decision for a unit involved in a collision
@@ -619,24 +554,18 @@ namespace PlunkAndPlunder.Core
 
         private void MakeAIYieldDecisions()
         {
-            // AI players automatically make yield decisions based on ship health
-            foreach (CollisionInfo collision in state.pendingCollisions)
+            // Use engine to generate AI yield decisions
+            Dictionary<string, bool> aiDecisions = engine.GetAIYieldDecisions(state.pendingCollisions);
+
+            // Submit all AI decisions
+            foreach (var kvp in aiDecisions)
             {
-                foreach (string unitId in collision.unitIds)
+                SubmitYieldDecision(kvp.Key, kvp.Value);
+
+                Unit unit = state.unitManager.GetUnit(kvp.Key);
+                if (unit != null)
                 {
-                    Unit unit = state.unitManager.GetUnit(unitId);
-                    if (unit == null) continue;
-
-                    Player player = state.playerManager.GetPlayer(unit.ownerId);
-                    if (player == null || player.type == PlayerType.Human) continue;
-
-                    // AI logic: yield if health is below 50%, otherwise push through
-                    bool shouldYield = unit.health < (unit.maxHealth * 0.5f);
-
-                    // Submit AI decision
-                    SubmitYieldDecision(unitId, shouldYield);
-
-                    Debug.Log($"[GameManager] AI Player {unit.ownerId} unit {unitId}: {(shouldYield ? "yielding" : "pushing")} (HP: {unit.health}/{unit.maxHealth})");
+                    Debug.Log($"[GameManager] AI Player {unit.ownerId} unit {kvp.Key}: {(kvp.Value ? "yielding" : "pushing")} (HP: {unit.health}/{unit.maxHealth})");
                 }
             }
         }
@@ -645,13 +574,9 @@ namespace PlunkAndPlunder.Core
         {
             Debug.Log($"[GameManager] All yield decisions collected, resolving collisions");
 
-            // Resolve collisions with yield decisions
-            List<GameEvent> collisionEvents = turnResolver.ResolveCollisionsWithYieldDecisions(
-                state.pendingCollisions,
-                state.collisionYieldDecisions
-            );
+            // Use engine to resolve collisions with yield decisions
+            List<GameEvent> collisionEvents = engine.ResolveCollisions(state.collisionYieldDecisions);
 
-            state.eventHistory.AddRange(collisionEvents);
             OnTurnResolved?.Invoke(collisionEvents);
 
             // Clear collision data
@@ -683,17 +608,10 @@ namespace PlunkAndPlunder.Core
                         processedUnits.Add(unit.id);
                         processedUnits.Add(opponent.id);
 
-                        if (enableDeterministicLogging)
-                        {
-                            Debug.Log($"[GameManager] Ongoing combat tracked: {unit.id} at {unit.position} vs {opponent.id} at {opponent.position}");
-                        }
+                        Debug.Log($"[GameManager] Ongoing combat tracked: {unit.id} at {unit.position} vs {opponent.id} at {opponent.position}");
                     }
                 }
             }
-
-            // Continue with regular combat resolution (for units not in collisions)
-            List<GameEvent> combatEvents = turnResolver.ResolveCombatAfterMovement();
-            state.eventHistory.AddRange(combatEvents);
 
             // Combine all events for animation
             List<GameEvent> allEvents = new List<GameEvent>(state.eventHistory);
@@ -876,7 +794,7 @@ namespace PlunkAndPlunder.Core
             turnAnimator.ResumeAnimation();
         }
 
-        public Pathfinding GetPathfinding() => pathfinding;
+        public Pathfinding GetPathfinding() => engine?.GetPathfinding();
 
         public void QuitGame()
         {
@@ -965,7 +883,7 @@ namespace PlunkAndPlunder.Core
                 }
 
                 // Highlight player's shipyard
-                BuildingRenderer buildingRenderer = FindObjectOfType<BuildingRenderer>();
+                BuildingRenderer buildingRenderer = FindFirstObjectByType<BuildingRenderer>();
                 if (buildingRenderer != null)
                 {
                     buildingRenderer.AddTemporaryHighlight(playerShipyard.id, duration: 5f);
@@ -978,7 +896,7 @@ namespace PlunkAndPlunder.Core
             }
 
             // Highlight player's ships
-            UnitRenderer unitRenderer = FindObjectOfType<UnitRenderer>();
+            UnitRenderer unitRenderer = FindFirstObjectByType<UnitRenderer>();
             if (unitRenderer != null)
             {
                 int highlightedShips = 0;

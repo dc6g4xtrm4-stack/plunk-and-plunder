@@ -40,7 +40,12 @@ namespace PlunkAndPlunder.Core
         ShipyardAttacked,
         ShipyardDestroyed,
         ConstructionProgressed, // NEW: Construction system event
-        GoldEarned // NEW: Income system event
+        GoldEarned, // NEW: Income system event
+        EncounterDetected, // NEW: Encounter system event
+        EncounterNeedsResolution, // NEW: Encounter system event
+        EncounterResolved, // NEW: Encounter system event
+        ContestedTileCreated, // NEW: Encounter system event
+        ContestedTileResolved // NEW: Encounter system event
     }
 
     [Serializable]
@@ -348,6 +353,76 @@ namespace PlunkAndPlunder.Core
             this.shipyardBonus = shipyardBonus;
             this.shipBonus = shipBonus;
             this.newTotal = newTotal;
+        }
+    }
+
+    [Serializable]
+    public class EncounterDetectedEvent : GameEvent
+    {
+        public Combat.Encounter encounter;
+
+        public EncounterDetectedEvent(int turnNumber, Combat.Encounter encounter)
+            : base(turnNumber, GameEventType.EncounterDetected, $"{encounter.Type} encounter detected: {encounter}")
+        {
+            this.encounter = encounter;
+        }
+    }
+
+    [Serializable]
+    public class EncounterNeedsResolutionEvent : GameEvent
+    {
+        public List<Combat.Encounter> encounters;
+
+        public EncounterNeedsResolutionEvent(int turnNumber, List<Combat.Encounter> encounters)
+            : base(turnNumber, GameEventType.EncounterNeedsResolution, $"{encounters.Count} encounters need resolution")
+        {
+            this.encounters = encounters;
+        }
+    }
+
+    [Serializable]
+    public class EncounterResolvedEvent : GameEvent
+    {
+        public Combat.Encounter encounter;
+        public string resolution;
+
+        public EncounterResolvedEvent(int turnNumber, Combat.Encounter encounter, string resolution)
+            : base(turnNumber, GameEventType.EncounterResolved, resolution)
+        {
+            this.encounter = encounter;
+            this.resolution = resolution;
+        }
+    }
+
+    [Serializable]
+    public class ContestedTileCreatedEvent : GameEvent
+    {
+        public HexCoord tileCoord;
+        public Combat.Encounter encounter;
+        public List<string> attackerIds;
+
+        public ContestedTileCreatedEvent(int turnNumber, HexCoord tileCoord, Combat.Encounter encounter, List<string> attackerIds)
+            : base(turnNumber, GameEventType.ContestedTileCreated,
+                $"Tile {tileCoord} is now contested by {attackerIds.Count} units")
+        {
+            this.tileCoord = tileCoord;
+            this.encounter = encounter;
+            this.attackerIds = attackerIds;
+        }
+    }
+
+    [Serializable]
+    public class ContestedTileResolvedEvent : GameEvent
+    {
+        public HexCoord tileCoord;
+        public string winnerId; // null if no winner
+
+        public ContestedTileResolvedEvent(int turnNumber, HexCoord tileCoord, string winnerId)
+            : base(turnNumber, GameEventType.ContestedTileResolved,
+                winnerId != null ? $"Tile {tileCoord} claimed by unit {winnerId}" : $"Tile {tileCoord} no longer contested")
+        {
+            this.tileCoord = tileCoord;
+            this.winnerId = winnerId;
         }
     }
 }

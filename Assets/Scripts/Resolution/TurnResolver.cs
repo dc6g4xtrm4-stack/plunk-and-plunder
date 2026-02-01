@@ -225,17 +225,22 @@ namespace PlunkAndPlunder.Resolution
                 destinationMap[dest].Add(kvp.Key);
             }
 
-            // Find collisions and store them
+            // Find encounters and store them (NEW ENCOUNTER SYSTEM)
             HashSet<string> blockedUnits = new HashSet<string>();
+            List<Combat.Encounter> detectedEncounters = new List<Combat.Encounter>();
+            HashSet<string> alreadyInEncounter = new HashSet<string>();
+
+            // Keep old collision tracking for backward compatibility (temporary)
             List<CollisionInfo> detectedCollisions = new List<CollisionInfo>();
             HashSet<string> alreadyInCollision = new HashSet<string>();
 
-            // Type 1: ENTERING SAME TILE collision (multiple units moving to same destination)
+            // Type 1: ENTRY ENCOUNTER (multiple units moving to same destination)
             // RULE: Two enemy ships can NEVER occupy the same tile
             // When enemy ships attempt to ENTER the same tile, prompt each: YIELD or ATTACK
-            //   - If one yields, the other gets the tile
-            //   - If neither yields, they fight ONE round and stay in original positions (contested tile)
-            //   - Friendly units from same player CAN stack peacefully (no collision)
+            //   - All YIELD → no movement
+            //   - One ATTACK → attacker claims tile
+            //   - Multiple ATTACK → contested tile (pairwise combat, all stay in place)
+            //   - Friendly units from same player CAN stack peacefully (no encounter)
             foreach (var kvp in destinationMap)
             {
                 HexCoord destination = kvp.Key;
@@ -259,36 +264,42 @@ namespace PlunkAndPlunder.Resolution
                         }
                     }
 
-                    // If all units belong to same player, NO collision - friendly stacking is allowed
+                    // If all units belong to same player, NO encounter - friendly stacking is allowed
                     if (unitsByOwner.Count == 1)
                     {
                         if (enableLogging)
                         {
                             Debug.Log($"[TurnResolver] {unitIds.Count} friendly units moving to {destination} - allowing peaceful stacking");
                         }
-                        continue; // Skip this, no collision for friendly units
+                        continue; // Skip this, no encounter for friendly units
                     }
 
-                    // ENEMY units detected trying to ENTER same tile - create collision
-                    // This triggers YIELD or ATTACK prompt
-                    CollisionInfo collision = new CollisionInfo(unitIds, destination);
-
-                    // Store paths for each unit involved in collision
+                    // ENEMY units detected trying to ENTER same tile - create ENTRY encounter
+                    // Gather previous positions for all involved units
+                    Dictionary<string, HexCoord> previousPositions = new Dictionary<string, HexCoord>();
                     foreach (string unitId in unitIds)
                     {
-                        if (movePaths.ContainsKey(unitId))
+                        Unit unit = unitManager.GetUnit(unitId);
+                        if (unit != null)
                         {
-                            collision.unitPaths[unitId] = movePaths[unitId];
+                            previousPositions[unitId] = unit.position;
                         }
-                        if (remainingPaths.ContainsKey(unitId))
-                        {
-                            collision.unitRemainingPaths[unitId] = remainingPaths[unitId];
-                        }
-                        alreadyInCollision.Add(unitId);
                     }
 
-                    detectedCollisions.Add(collision);
-                    events.Add(new CollisionDetectedEvent(turnNumber, unitIds, destination));
+                    Combat.Encounter encounter = Combat.Encounter.CreateEntryEncounter(
+                        unitIds: unitIds,
+                        targetTile: destination,
+                        previousPositions: previousPositions,
+                        turnNumber: turnNumber
+                    );
+
+                    detectedEncounters.Add(encounter);
+                    events.Add(new EncounterDetectedEvent(turnNumber, encounter));
+
+                    foreach (string unitId in unitIds)
+                    {
+                        alreadyInEncounter.Add(unitId);
+                    }
 
                     if (enableLogging)
                     {
@@ -306,24 +317,24 @@ namespace PlunkAndPlunder.Resolution
                         string tileId = $"#{Math.Abs(destination.GetHashCode()) % 10000}";
                         if (shipNames.Count == 2)
                         {
-                            Debug.Log($"[TurnResolver] ENTERING COLLISION: {shipNames[0]} and {shipNames[1]} contest tile {tileId}");
+                            Debug.Log($"[TurnResolver] ENTRY ENCOUNTER: {shipNames[0]} and {shipNames[1]} contest tile {tileId}");
                         }
                         else
                         {
-                            Debug.Log($"[TurnResolver] ENTERING COLLISION at tile {tileId}: {string.Join(", ", shipNames)}");
+                            Debug.Log($"[TurnResolver] ENTRY ENCOUNTER at tile {tileId}: {string.Join(", ", shipNames)}");
                         }
 
                         // Log to file
-                        GameLogger.LogCollision(shipNames, destination, "ENTERING");
+                        GameLogger.LogCollision(shipNames, destination, "ENTRY");
                     }
                 }
             }
 
-            // Type 2: PASSING collision (ships swapping positions - moving into each other)
+            // Type 2: PASSING ENCOUNTER (ships swapping positions - moving into each other)
             // RULE: When two enemy ships are about to PASS each other (swap tiles), prompt each: PROCEED or ATTACK
-            //   - If both proceed (yield), they can swap positions peacefully
-            //   - If either attacks (doesn't yield), they fight ONE round and stay in original positions
-            //   - Friendly ships from same player CAN pass through each other freely (no collision)
+            //   - Both PROCEED → peaceful swap
+            //   - Any ATTACK → combat on edge, both stay in original positions
+            //   - Friendly ships from same player CAN pass through each other freely (no encounter)
             List<MoveOrder> moveOrdersList = moveOrders.ToList();
             for (int i = 0; i < moveOrdersList.Count; i++)
             {
@@ -332,8 +343,8 @@ namespace PlunkAndPlunder.Resolution
                     MoveOrder order1 = moveOrdersList[i];
                     MoveOrder order2 = moveOrdersList[j];
 
-                    // Skip if either unit is already in a collision
-                    if (alreadyInCollision.Contains(order1.unitId) || alreadyInCollision.Contains(order2.unitId))
+                    // Skip if either unit is already in an encounter
+                    if (alreadyInEncounter.Contains(order1.unitId) || alreadyInEncounter.Contains(order2.unitId))
                         continue;
 
                     // Get units and their start/end positions
@@ -344,7 +355,7 @@ namespace PlunkAndPlunder.Resolution
                         continue;
 
                     // Skip if same owner (friendly ships can pass through each other peacefully)
-                    // RULE: Friendly ships from the same player NEVER trigger combat or collision
+                    // RULE: Friendly ships from the same player NEVER trigger combat or encounters
                     if (unit1.ownerId == unit2.ownerId)
                         continue;
 
@@ -359,38 +370,20 @@ namespace PlunkAndPlunder.Resolution
                     // Check if they're swapping positions (A->B and B->A)
                     if (unit1End.Equals(unit2Start) && unit2End.Equals(unit1Start))
                     {
-                        // Enemy ships are PASSING each other - create collision
-                        // This triggers PROCEED or ATTACK prompt
-                        List<string> swapUnits = new List<string> { order1.unitId, order2.unitId };
+                        // Enemy ships are PASSING each other - create PASSING encounter
+                        Combat.Encounter encounter = Combat.Encounter.CreatePassingEncounter(
+                            unitIdA: order1.unitId,
+                            unitIdB: order2.unitId,
+                            positionA: unit1Start,
+                            positionB: unit2Start,
+                            turnNumber: turnNumber
+                        );
 
-                        // Use the midpoint or first ship's destination for collision location
-                        HexCoord collisionLocation = unit1End;
+                        detectedEncounters.Add(encounter);
+                        events.Add(new EncounterDetectedEvent(turnNumber, encounter));
 
-                        CollisionInfo collision = new CollisionInfo(swapUnits, collisionLocation);
-
-                        // Store paths
-                        if (movePaths.ContainsKey(order1.unitId))
-                        {
-                            collision.unitPaths[order1.unitId] = movePaths[order1.unitId];
-                        }
-                        if (remainingPaths.ContainsKey(order1.unitId))
-                        {
-                            collision.unitRemainingPaths[order1.unitId] = remainingPaths[order1.unitId];
-                        }
-                        if (movePaths.ContainsKey(order2.unitId))
-                        {
-                            collision.unitPaths[order2.unitId] = movePaths[order2.unitId];
-                        }
-                        if (remainingPaths.ContainsKey(order2.unitId))
-                        {
-                            collision.unitRemainingPaths[order2.unitId] = remainingPaths[order2.unitId];
-                        }
-
-                        detectedCollisions.Add(collision);
-                        events.Add(new CollisionDetectedEvent(turnNumber, swapUnits, collisionLocation));
-
-                        alreadyInCollision.Add(order1.unitId);
-                        alreadyInCollision.Add(order2.unitId);
+                        alreadyInEncounter.Add(order1.unitId);
+                        alreadyInEncounter.Add(order2.unitId);
 
                         if (enableLogging)
                         {
@@ -400,18 +393,26 @@ namespace PlunkAndPlunder.Resolution
                             string tile1Id = $"#{Math.Abs(unit1Start.GetHashCode()) % 10000}";
                             string tile2Id = $"#{Math.Abs(unit1End.GetHashCode()) % 10000}";
 
-                            Debug.Log($"[TurnResolver] PASSING COLLISION: {ship1Name} and {ship2Name} trade fire while crossing between tiles {tile1Id} and {tile2Id}");
+                            Debug.Log($"[TurnResolver] PASSING ENCOUNTER: {ship1Name} and {ship2Name} crossing between tiles {tile1Id} and {tile2Id}");
 
                             // Log to file
                             List<string> shipNames = new List<string> { ship1Name, ship2Name };
-                            GameLogger.LogCollision(shipNames, collisionLocation, "PASSING");
+                            GameLogger.LogCollision(shipNames, unit1End, "PASSING");
                         }
                     }
                 }
             }
 
-            // If collisions detected, return early with collision events
-            // GameManager will handle requesting yield decisions
+            // If encounters detected, return early with encounter events
+            // GameManager will handle requesting player decisions
+            if (detectedEncounters.Count > 0)
+            {
+                // Wrap all encounters in a single EncounterNeedsResolutionEvent
+                events.Add(new EncounterNeedsResolutionEvent(turnNumber, detectedEncounters));
+                return events;
+            }
+
+            // OLD: Backward compatibility for collision system (will be removed)
             if (detectedCollisions.Count > 0)
             {
                 // Store collisions in event for GameManager to handle
@@ -2057,6 +2058,256 @@ namespace PlunkAndPlunder.Resolution
             }
 
             return events;
+        }
+
+        // ====================
+        // NEW ENCOUNTER SYSTEM RESOLUTION METHODS
+        // ====================
+
+        /// <summary>
+        /// Resolves all encounters with player decisions.
+        /// Main entry point for encounter resolution.
+        /// </summary>
+        public List<GameEvent> ResolveEncountersWithDecisions(List<Combat.Encounter> encounters)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            // Sort encounters deterministically for consistent resolution order
+            var sortedEncounters = encounters.OrderBy(e => e.GetStableSortKey()).ToList();
+
+            foreach (var encounter in sortedEncounters)
+            {
+                if (encounter.Type == Combat.EncounterType.PASSING)
+                {
+                    events.AddRange(ResolvePassingEncounter(encounter));
+                }
+                else if (encounter.Type == Combat.EncounterType.ENTRY)
+                {
+                    events.AddRange(ResolveEntryEncounter(encounter));
+                }
+            }
+
+            return events;
+        }
+
+        /// <summary>
+        /// Resolves a PASSING encounter (two ships swapping positions).
+        /// Decision matrix:
+        ///   - PROCEED + PROCEED → peaceful swap
+        ///   - Any ATTACK → combat on edge, units stay in place
+        /// </summary>
+        private List<GameEvent> ResolvePassingEncounter(Combat.Encounter encounter)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            if (encounter.InvolvedUnitIds.Count != 2)
+            {
+                Debug.LogError($"[TurnResolver] PASSING encounter must have exactly 2 units, got {encounter.InvolvedUnitIds.Count}");
+                return events;
+            }
+
+            string unitIdA = encounter.InvolvedUnitIds[0];
+            string unitIdB = encounter.InvolvedUnitIds[1];
+
+            Unit unitA = unitManager.GetUnit(unitIdA);
+            Unit unitB = unitManager.GetUnit(unitIdB);
+
+            if (unitA == null || unitB == null)
+            {
+                Debug.LogError($"[TurnResolver] Cannot resolve PASSING encounter - units not found");
+                return events;
+            }
+
+            var decisionA = encounter.PassingDecisions[unitIdA];
+            var decisionB = encounter.PassingDecisions[unitIdB];
+
+            bool bothProceed = (decisionA == Combat.PassingEncounterDecision.PROCEED &&
+                                decisionB == Combat.PassingEncounterDecision.PROCEED);
+
+            if (bothProceed)
+            {
+                // Peaceful swap - exchange positions
+                HexCoord posA = unitA.position;
+                HexCoord posB = unitB.position;
+
+                unitA.position = posB;
+                unitB.position = posA;
+
+                events.Add(new UnitMovedEvent(turnNumber, unitIdA, posA, posB));
+                events.Add(new UnitMovedEvent(turnNumber, unitIdB, posB, posA));
+
+                encounter.MarkAsResolved();
+                events.Add(new EncounterResolvedEvent(turnNumber, encounter,
+                    $"PASSING encounter resolved peacefully - ships swapped positions"));
+
+                if (enableLogging)
+                {
+                    string shipAName = unitA.GetDisplayName(playerManager);
+                    string shipBName = unitB.GetDisplayName(playerManager);
+                    Debug.Log($"[TurnResolver] PASSING PEACEFUL: {shipAName} and {shipBName} swapped positions");
+                }
+            }
+            else
+            {
+                // At least one attacked - combat on edge, units stay in place
+                HexCoord edgeLocation = encounter.EdgeCoords.HasValue ? encounter.EdgeCoords.Value.Item1 : unitA.position;
+
+                events.AddRange(ResolveOneRoundOfCombat(unitA, unitB, edgeLocation));
+
+                encounter.MarkAsResolved();
+                events.Add(new EncounterResolvedEvent(turnNumber, encounter,
+                    $"PASSING encounter resolved with combat - ships remain in original positions"));
+
+                if (enableLogging)
+                {
+                    string shipAName = unitA.GetDisplayName(playerManager);
+                    string shipBName = unitB.GetDisplayName(playerManager);
+                    Debug.Log($"[TurnResolver] PASSING COMBAT: {shipAName} and {shipBName} fought - stayed in place");
+                }
+            }
+
+            return events;
+        }
+
+        /// <summary>
+        /// Resolves an ENTRY encounter (multiple ships entering same tile).
+        /// Decision matrix:
+        ///   - All YIELD → no movement
+        ///   - Exactly one ATTACK → attacker claims tile
+        ///   - Multiple ATTACK → contested tile (pairwise combat, all stay in place, persist)
+        /// </summary>
+        private List<GameEvent> ResolveEntryEncounter(Combat.Encounter encounter)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            // Identify attackers and yielders
+            List<string> attackerIds = new List<string>();
+            List<string> yielderIds = new List<string>();
+
+            foreach (var kvp in encounter.EntryDecisions)
+            {
+                if (kvp.Value == Combat.EntryEncounterDecision.ATTACK)
+                {
+                    attackerIds.Add(kvp.Key);
+                }
+                else if (kvp.Value == Combat.EntryEncounterDecision.YIELD)
+                {
+                    yielderIds.Add(kvp.Key);
+                }
+            }
+
+            HexCoord targetTile = encounter.TileCoord.Value;
+
+            if (attackerIds.Count == 0)
+            {
+                // All yielded - no movement
+                encounter.MarkAsResolved();
+                events.Add(new EncounterResolvedEvent(turnNumber, encounter,
+                    $"ENTRY encounter resolved - all units yielded, no movement"));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] ENTRY ALL YIELD: All units stayed in place at {targetTile}");
+                }
+            }
+            else if (attackerIds.Count == 1)
+            {
+                // Exactly one attacker - claims the tile
+                string attackerId = attackerIds[0];
+                Unit attacker = unitManager.GetUnit(attackerId);
+
+                if (attacker != null)
+                {
+                    HexCoord from = attacker.position;
+                    attacker.position = targetTile;
+
+                    events.Add(new UnitMovedEvent(turnNumber, attackerId, from, targetTile));
+
+                    encounter.MarkAsResolved();
+                    events.Add(new EncounterResolvedEvent(turnNumber, encounter,
+                        $"ENTRY encounter resolved - unit {attackerId} claimed tile {targetTile}"));
+
+                    if (enableLogging)
+                    {
+                        string shipName = attacker.GetDisplayName(playerManager);
+                        Debug.Log($"[TurnResolver] ENTRY CLAIM: {shipName} claimed tile {targetTile}");
+                    }
+                }
+            }
+            else
+            {
+                // Multiple attackers - contested tile
+                // Pairwise combat between all attackers
+                List<Unit> attackers = attackerIds
+                    .Select(id => unitManager.GetUnit(id))
+                    .Where(u => u != null)
+                    .ToList();
+
+                // Conduct pairwise combat
+                for (int i = 0; i < attackers.Count; i++)
+                {
+                    for (int j = i + 1; j < attackers.Count; j++)
+                    {
+                        events.AddRange(ResolveOneRoundOfCombat(attackers[i], attackers[j], targetTile));
+                    }
+                }
+
+                // Mark as contested - this persists across turns
+                encounter.MarkAsContested();
+                events.Add(new ContestedTileCreatedEvent(turnNumber, targetTile, encounter, attackerIds));
+                events.Add(new EncounterResolvedEvent(turnNumber, encounter,
+                    $"ENTRY encounter created contested tile at {targetTile} with {attackerIds.Count} units"));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] ENTRY CONTESTED: Tile {targetTile} contested by {attackerIds.Count} units - pairwise combat");
+                }
+            }
+
+            return events;
+        }
+
+        /// <summary>
+        /// Helper method to execute a unit movement to a tile (used by ENTRY encounter resolution).
+        /// </summary>
+        private void ExecuteUnitMovementToTile(Unit unit, HexCoord targetTile, List<GameEvent> events)
+        {
+            if (unit == null) return;
+
+            HexCoord from = unit.position;
+            unit.position = targetTile;
+
+            events.Add(new UnitMovedEvent(turnNumber, unit.id, from, targetTile));
+
+            if (enableLogging)
+            {
+                string shipName = unit.GetDisplayName(playerManager);
+                Debug.Log($"[TurnResolver] {shipName} moved to {targetTile}");
+            }
+        }
+
+        /// <summary>
+        /// Helper method to execute a swap movement between two units (used by PASSING encounter resolution).
+        /// </summary>
+        private void ExecuteSwapMovement(Unit unitA, Unit unitB, List<GameEvent> events)
+        {
+            if (unitA == null || unitB == null) return;
+
+            HexCoord posA = unitA.position;
+            HexCoord posB = unitB.position;
+
+            unitA.position = posB;
+            unitB.position = posA;
+
+            events.Add(new UnitMovedEvent(turnNumber, unitA.id, posA, posB));
+            events.Add(new UnitMovedEvent(turnNumber, unitB.id, posB, posA));
+
+            if (enableLogging)
+            {
+                string shipAName = unitA.GetDisplayName(playerManager);
+                string shipBName = unitB.GetDisplayName(playerManager);
+                Debug.Log($"[TurnResolver] {shipAName} and {shipBName} swapped positions");
+            }
         }
     }
 }
