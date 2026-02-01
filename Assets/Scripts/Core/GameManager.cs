@@ -27,6 +27,9 @@ namespace PlunkAndPlunder.Core
         public GameState state;
         public GameConfig config;
 
+        // Simulation support: skip animation for headless AI testing
+        public bool skipAnimation = false;
+
         // Systems
         private TurnResolver turnResolver;
         private TurnAnimator turnAnimator;
@@ -99,6 +102,8 @@ namespace PlunkAndPlunder.Core
             if (ConstructionManager.Instance != null)
             {
                 ConstructionManager.Instance.Reset();
+                // CRITICAL: Inject GameState so ConstructionManager uses the correct state
+                ConstructionManager.Instance.Initialize(state);
             }
 
             // Setup players
@@ -501,10 +506,20 @@ namespace PlunkAndPlunder.Core
             }
             else
             {
-                // No collisions, proceed to animation
+                // No collisions, proceed to animation (or skip if headless)
                 Debug.Log($"[GameManager] No collisions detected, proceeding to animation with {events.Count} events");
                 ChangePhase(GamePhase.Animating);
-                turnAnimator.AnimateEvents(events, state);
+
+                if (skipAnimation)
+                {
+                    // Headless mode: skip animation and immediately complete turn
+                    Debug.Log("[GameManager] Skipping animation (headless mode)");
+                    HandleAnimationComplete();
+                }
+                else
+                {
+                    turnAnimator.AnimateEvents(events, state);
+                }
             }
         }
 
@@ -683,10 +698,20 @@ namespace PlunkAndPlunder.Core
             // Combine all events for animation
             List<GameEvent> allEvents = new List<GameEvent>(state.eventHistory);
 
-            // Transition to animation
+            // Transition to animation (or skip if headless)
             Debug.Log($"[GameManager] Collisions resolved, proceeding to animation with {allEvents.Count} total events");
             ChangePhase(GamePhase.Animating);
-            turnAnimator.AnimateEvents(allEvents, state);
+
+            if (skipAnimation)
+            {
+                // Headless mode: skip animation and immediately complete turn
+                Debug.Log("[GameManager] Skipping animation (headless mode)");
+                HandleAnimationComplete();
+            }
+            else
+            {
+                turnAnimator.AnimateEvents(allEvents, state);
+            }
         }
 
         private void HandleConflictDetected(ConflictDetectedEvent conflictEvent)

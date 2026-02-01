@@ -46,7 +46,7 @@ namespace PlunkAndPlunder.Construction.Commands
             constructionState.InitializeShipyard(shipyard.id);
 
             // Destroy the ship
-            gameState.unitManager.DestroyUnit(shipId);
+            gameState.unitManager.RemoveUnit(shipId);
 
             Debug.Log($"[DeployShipyardCommand] Player {playerId} deployed shipyard {shipyard.id} at {position}, consumed ship {shipId}");
 

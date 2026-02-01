@@ -1,5 +1,6 @@
 using PlunkAndPlunder.Core;
 using PlunkAndPlunder.Networking;
+using PlunkAndPlunder.Simulation;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,6 +11,7 @@ namespace PlunkAndPlunder.UI
         private Button hostButton;
         private Button joinButton;
         private Button offlineButton;
+        private Button simulationButton;
         private Button quitButton;
         private Text debugText;
 
@@ -47,10 +49,11 @@ namespace PlunkAndPlunder.UI
             titleRect.anchoredPosition = new Vector2(0, 300);
 
             // Buttons
-            offlineButton = CreateButton("Play Offline (1 Human + 3 AI)", new Vector2(0, 100), OnOfflineClicked);
-            hostButton = CreateButton("Host Game (Steam)", new Vector2(0, 0), OnHostClicked);
-            joinButton = CreateButton("Join Game (Steam)", new Vector2(0, -100), OnJoinClicked);
-            quitButton = CreateButton("Quit", new Vector2(0, -200), OnQuitClicked);
+            offlineButton = CreateButton("Play Offline (1 Human + 3 AI)", new Vector2(0, 150), OnOfflineClicked);
+            simulationButton = CreateButton("Run AI Simulation (4 AI, 100 turns)", new Vector2(0, 50), OnSimulationClicked);
+            hostButton = CreateButton("Host Game (Steam)", new Vector2(0, -50), OnHostClicked);
+            joinButton = CreateButton("Join Game (Steam)", new Vector2(0, -150), OnJoinClicked);
+            quitButton = CreateButton("Quit", new Vector2(0, -250), OnQuitClicked);
 
             // Debug text (bottom)
             GameObject debugTextObj = CreateText("Ready - Click Play Offline to start", 18);
@@ -163,6 +166,50 @@ namespace PlunkAndPlunder.UI
         {
             Debug.Log("[MainMenuUI] Joining game (Steam) - Not implemented in MVP");
             // TODO: Show lobby browser or input field for lobby ID
+        }
+
+        private void OnSimulationClicked()
+        {
+            Debug.Log("========== SIMULATION BUTTON CLICKED ==========");
+            Debug.Log("[MainMenuUI] Starting 100-turn HEADLESS AI simulation");
+            if (debugText != null) debugText.text = "Generating simulation...";
+
+            try
+            {
+                // Create headless simulation (NO UI, pure game logic)
+                GameObject simObj = new GameObject("HeadlessSimulation");
+                HeadlessSimulation simulation = simObj.AddComponent<HeadlessSimulation>();
+
+                // Set up completion callback
+                simulation.OnSimulationComplete = (logFilePath) =>
+                {
+                    Debug.Log($"[MainMenuUI] Simulation complete! Log: {logFilePath}");
+                    if (debugText != null)
+                    {
+                        debugText.text = $"Simulation complete! Log: {System.IO.Path.GetFileName(logFilePath)}";
+                        debugText.color = Color.green;
+                    }
+
+                    // TODO: Optionally load UI and replay the game from log
+                    // For now, just show success message
+                };
+
+                // Run simulation (4 AI players, 100 turns, generates timestamped log)
+                simulation.RunSimulation(numPlayers: 4, maxTurns: 100);
+
+                Debug.Log("[MainMenuUI] Headless simulation started - generating game...");
+                if (debugText != null)
+                {
+                    debugText.text = "Simulating 100 turns... (check Console)";
+                    debugText.color = Color.yellow;
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[MainMenuUI] Exception in OnSimulationClicked: {e.Message}");
+                Debug.LogError($"Stack trace: {e.StackTrace}");
+                if (debugText != null) debugText.text = $"ERROR: {e.Message}";
+            }
         }
 
         private void OnQuitClicked()

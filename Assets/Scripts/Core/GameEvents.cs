@@ -38,7 +38,9 @@ namespace PlunkAndPlunder.Core
         CollisionNeedsResolution,
         CollisionResolved,
         ShipyardAttacked,
-        ShipyardDestroyed
+        ShipyardDestroyed,
+        ConstructionProgressed, // NEW: Construction system event
+        GoldEarned // NEW: Income system event
     }
 
     [Serializable]
@@ -323,6 +325,29 @@ namespace PlunkAndPlunder.Core
             this.ownerId = ownerId;
             this.position = position;
             this.attackerUnitId = attackerUnitId;
+        }
+    }
+
+    [Serializable]
+    public class GoldEarnedEvent : GameEvent
+    {
+        public int playerId;
+        public int amount;
+        public int baseIncome;
+        public int shipyardBonus;
+        public int shipBonus;
+        public int newTotal;
+
+        public GoldEarnedEvent(int turnNumber, int playerId, int amount, int baseIncome, int shipyardBonus, int shipBonus, int newTotal)
+            : base(turnNumber, GameEventType.GoldEarned,
+                $"Player {playerId} earned {amount}g (base: {baseIncome}g, shipyards: {shipyardBonus}g, ships: {shipBonus}g) → {newTotal}g")
+        {
+            this.playerId = playerId;
+            this.amount = amount;
+            this.baseIncome = baseIncome;
+            this.shipyardBonus = shipyardBonus;
+            this.shipBonus = shipBonus;
+            this.newTotal = newTotal;
         }
     }
 }

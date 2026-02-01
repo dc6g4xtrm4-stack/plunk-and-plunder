@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PlunkAndPlunder.Structures;
 
 namespace PlunkAndPlunder.Construction
 {
@@ -52,7 +53,7 @@ namespace PlunkAndPlunder.Construction
         /// </summary>
         public bool IsQueueFull(string shipyardId)
         {
-            return GetQueueLength(shipyardId) >= Structures.BuildingConfig.MAX_QUEUE_SIZE;
+            return GetQueueLength(shipyardId) >= BuildingConfig.MAX_QUEUE_SIZE;
         }
 
         /// <summary>

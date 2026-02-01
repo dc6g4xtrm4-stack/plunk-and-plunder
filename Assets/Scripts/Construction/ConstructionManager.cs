@@ -19,6 +19,10 @@ namespace PlunkAndPlunder.Construction
         // Current construction state (read-only from outside)
         private ConstructionState state;
 
+        // CRITICAL: GameState reference for construction operations
+        // Must be injected via Initialize() before use
+        private GameState gameState;
+
         // Events for UI updates
         public event Action<ConstructionQueuedEvent> OnConstructionQueued;
         public event Action<ConstructionProgressedEvent> OnConstructionProgressed;
@@ -45,6 +49,16 @@ namespace PlunkAndPlunder.Construction
         }
 
         /// <summary>
+        /// Initialize with a GameState reference
+        /// MUST be called before any construction operations
+        /// </summary>
+        public void Initialize(GameState gameState)
+        {
+            this.gameState = gameState;
+            Debug.Log("[ConstructionManager] GameState injected");
+        }
+
+        /// <summary>
         /// Get a read-only copy of the current state
         /// </summary>
         public ConstructionState GetState()
@@ -60,7 +74,7 @@ namespace PlunkAndPlunder.Construction
         {
             // 1. Validate request
             var validation = ConstructionValidator.ValidateQueueShip(
-                playerId, shipyardId, state, GameManager.Instance.state
+                playerId, shipyardId, state, gameState
             );
 
             if (!validation.isValid)
@@ -71,7 +85,7 @@ namespace PlunkAndPlunder.Construction
 
             // 2. Create and execute command
             var command = new QueueShipCommand(playerId, shipyardId);
-            var result = command.Execute(state, GameManager.Instance.state);
+            var result = command.Execute(state, gameState);
 
             if (result.success)
             {
@@ -99,7 +113,7 @@ namespace PlunkAndPlunder.Construction
         {
             // 1. Validate request
             var validation = ConstructionValidator.ValidateDeployShipyard(
-                playerId, shipId, position, GameManager.Instance.state
+                playerId, shipId, position, gameState
             );
 
             if (!validation.isValid)
@@ -110,7 +124,7 @@ namespace PlunkAndPlunder.Construction
 
             // 2. Create and execute command
             var command = new DeployShipyardCommand(playerId, shipId, position);
-            var result = command.Execute(state, GameManager.Instance.state);
+            var result = command.Execute(state, gameState);
 
             if (result.success)
             {
@@ -142,7 +156,7 @@ namespace PlunkAndPlunder.Construction
 
             // 2. Create and execute command
             var command = new CancelConstructionCommand(playerId, jobId, refundPercent);
-            var result = command.Execute(state, GameManager.Instance.state);
+            var result = command.Execute(state, gameState);
 
             if (result.success)
             {
@@ -166,7 +180,7 @@ namespace PlunkAndPlunder.Construction
         /// </summary>
         public List<GameEvent> ProcessTurn(int turnNumber)
         {
-            var events = ConstructionProcessor.ProcessAllQueues(state, GameManager.Instance.state, turnNumber);
+            var events = ConstructionProcessor.ProcessAllQueues(state, gameState, turnNumber);
 
             // Fire progress events
             foreach (var evt in events)
@@ -182,7 +196,7 @@ namespace PlunkAndPlunder.Construction
                         spawnPosition = shipBuilt.position
                     });
                 }
-                else if (evt.eventType == GameEventType.ConstructionProgressed)
+                else if (evt.type == GameEventType.ConstructionProgressed)
                 {
                     // Note: We could enhance this to include job details if needed
                 }

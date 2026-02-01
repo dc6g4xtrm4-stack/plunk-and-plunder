@@ -22,14 +22,16 @@ namespace PlunkAndPlunder.Resolution
         private CombatResolver combatResolver;
         private int turnNumber;
         private bool enableLogging;
+        private bool deferUnitRemoval; // If true, TurnAnimator removes units; if false, remove immediately
 
-        public TurnResolver(HexGrid grid, UnitManager unitManager, PlayerManager playerManager, StructureManager structureManager, bool enableLogging = false)
+        public TurnResolver(HexGrid grid, UnitManager unitManager, PlayerManager playerManager, StructureManager structureManager, bool enableLogging = false, bool deferUnitRemoval = true)
         {
             this.grid = grid;
             this.unitManager = unitManager;
             this.playerManager = playerManager;
             this.structureManager = structureManager;
             this.enableLogging = enableLogging;
+            this.deferUnitRemoval = deferUnitRemoval;
             // Initialize combat resolver with a seed based on system time
             this.combatResolver = new CombatResolver(UnityEngine.Random.Range(0, int.MaxValue));
         }
@@ -49,6 +51,9 @@ namespace PlunkAndPlunder.Resolution
 
             // Reset movement for all units at start of turn
             ResetAllUnitMovement();
+
+            // Process income at start of turn (NEW ECONOMY SYSTEM)
+            events.AddRange(ProcessIncome());
 
             // Process build queues at start of turn (NEW CONSTRUCTION SYSTEM)
             if (ConstructionManager.Instance != null)
@@ -782,11 +787,14 @@ namespace PlunkAndPlunder.Resolution
                 Debug.Log($"[TurnResolver] {unit1Name} attacks {unit2Name} at tile {tileId}: {unit1.health}HP vs {unit2.health}HP");
             }
 
-            // Create destruction events (units will be removed by TurnAnimator)
+            // Create destruction events (units removed immediately or by TurnAnimator)
             if (attackerDestroyed)
             {
                 events.Add(new UnitDestroyedEvent(turnNumber, unit1.id, unit1.ownerId, location));
-                // unitManager.RemoveUnit(unit1.id); // Deferred to TurnAnimator
+                if (!deferUnitRemoval)
+                {
+                    unitManager.RemoveUnit(unit1.id);
+                }
 
                 if (enableLogging)
                 {
@@ -798,7 +806,10 @@ namespace PlunkAndPlunder.Resolution
             if (defenderDestroyed)
             {
                 events.Add(new UnitDestroyedEvent(turnNumber, unit2.id, unit2.ownerId, location));
-                // unitManager.RemoveUnit(unit2.id); // Deferred to TurnAnimator
+                if (!deferUnitRemoval)
+                {
+                    unitManager.RemoveUnit(unit2.id);
+                }
 
                 if (enableLogging)
                 {
@@ -1202,8 +1213,11 @@ namespace PlunkAndPlunder.Resolution
                     shipyard = structureManager.CreateStructure(order.playerId, order.position, StructureType.SHIPYARD);
                 }
 
-                // NOTE: We don't remove the ship here - TurnAnimator will do it
-                // unitManager.RemoveUnit(order.unitId); // Deferred to TurnAnimator
+                // Remove ship (immediately or deferred to TurnAnimator)
+                if (!deferUnitRemoval)
+                {
+                    unitManager.RemoveUnit(order.unitId);
+                }
 
                 events.Add(new ShipyardDeployedEvent(turnNumber, order.unitId, shipyard.id, order.playerId, order.position));
 
@@ -1851,6 +1865,58 @@ namespace PlunkAndPlunder.Resolution
             {
                 Debug.Log($"[TurnResolver] Reset movement for {allUnits.Count} units");
             }
+        }
+
+        /// <summary>
+        /// Process gold income for all players at start of turn
+        /// Base income: 10g per turn
+        /// Shipyard bonus: +5g per shipyard
+        /// Ship bonus: +2g per ship
+        /// </summary>
+        private List<GameEvent> ProcessIncome()
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            const int BASE_INCOME = 10;
+            const int SHIPYARD_INCOME = 5;
+            const int SHIP_INCOME = 2;
+
+            foreach (var player in playerManager.players)
+            {
+                if (player.isEliminated)
+                    continue;
+
+                // Calculate income components
+                int baseIncome = BASE_INCOME;
+                int shipyardCount = structureManager.GetStructuresForPlayer(player.id)
+                    .Count(s => s.type == PlunkAndPlunder.Structures.StructureType.SHIPYARD);
+                int shipCount = unitManager.GetUnitsForPlayer(player.id).Count;
+
+                int shipyardBonus = shipyardCount * SHIPYARD_INCOME;
+                int shipBonus = shipCount * SHIP_INCOME;
+                int totalIncome = baseIncome + shipyardBonus + shipBonus;
+
+                // Award income
+                player.gold += totalIncome;
+
+                // Create event
+                events.Add(new GoldEarnedEvent(
+                    turnNumber,
+                    player.id,
+                    totalIncome,
+                    baseIncome,
+                    shipyardBonus,
+                    shipBonus,
+                    player.gold
+                ));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] Player {player.id} earned {totalIncome}g → {player.gold}g total");
+                }
+            }
+
+            return events;
         }
 
         /// <summary>
