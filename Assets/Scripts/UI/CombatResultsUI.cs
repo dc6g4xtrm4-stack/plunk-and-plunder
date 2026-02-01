@@ -8,7 +8,8 @@ using UnityEngine.UI;
 namespace PlunkAndPlunder.UI
 {
     /// <summary>
-    /// UI for displaying combat results with dice rolls
+    /// Legacy UI for displaying combat results (fallback)
+    /// NOTE: CombatResultsHUD.cs is the primary UI for deterministic combat
     /// </summary>
     public class CombatResultsUI : MonoBehaviour
     {
@@ -194,13 +195,9 @@ namespace PlunkAndPlunder.UI
             attackerNameText.text = attacker.GetDisplayName(playerManager);
             defenderNameText.text = defender.GetDisplayName(playerManager);
 
-            // Format dice rolls with highest 2 highlighted for attacker
-            string attackerDiceDisplay = FormatDiceRolls(combatEvent.attackerRolls, true);
-            attackerDiceText.text = "Dice Rolls:\n" + attackerDiceDisplay;
-
-            // Format dice rolls with highest 2 highlighted for defender
-            string defenderDiceDisplay = FormatDiceRolls(combatEvent.defenderRolls, true);
-            defenderDiceText.text = "Dice Rolls:\n" + defenderDiceDisplay;
+            // Deterministic combat - no dice rolls
+            attackerDiceText.text = $"Cannons: {attacker.cannons}";
+            defenderDiceText.text = $"Cannons: {defender.cannons}";
 
             // Show damage dealt
             attackerDamageText.text = combatEvent.damageToAttacker > 0
