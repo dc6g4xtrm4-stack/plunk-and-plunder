@@ -757,7 +757,6 @@ namespace PlunkAndPlunder.Core
                     // OLD: Fallback to old UI (will be removed)
                     combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue, state.playerManager);
                 }
-                }
             }
 
             // Award salvage gold for destroyed ships (50% of build cost = 25g for basic ships)
