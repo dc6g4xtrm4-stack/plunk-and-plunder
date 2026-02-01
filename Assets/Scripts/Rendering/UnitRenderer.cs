@@ -651,67 +651,67 @@ namespace PlunkAndPlunder.Rendering
 
             HideSelectionIndicator();
         }
-    }
 
-    // ====================
-    // VISUAL TIER CALCULATION SYSTEM
-    // ====================
+        // ====================
+        // VISUAL TIER CALCULATION SYSTEM
+        // ====================
 
-    /// <summary>
-    /// Calculate sail visual tier (3 tiers from 0-5 upgrades)
-    /// Tier 1: 0-1 sail upgrades (small square sails)
-    /// Tier 2: 2-3 sail upgrades (larger triangular sails)
-    /// Tier 3: 4-5 sail upgrades (massive billowing sails)
-    /// </summary>
-    private int GetSailVisualTier(int sailUpgrades)
-    {
-        if (sailUpgrades <= 1) return 1;
-        if (sailUpgrades <= 3) return 2;
-        return 3; // 4-5 upgrades
-    }
-
-    /// <summary>
-    /// Calculate cannon visual tier (3 tiers from 2-7 total cannons)
-    /// Tier 1: 2-3 cannons (2 per side, small)
-    /// Tier 2: 4-5 cannons (4 per side, medium)
-    /// Tier 3: 6-7 cannons (6+ per side, large/varied)
-    /// </summary>
-    private int GetCannonVisualTier(int totalCannons)
-    {
-        if (totalCannons <= 3) return 1;
-        if (totalCannons <= 5) return 2;
-        return 3; // 6-7 cannons
-    }
-
-    /// <summary>
-    /// Calculate ship scale based on all upgrades (0.5 → 0.95 of tile size)
-    /// Combines maxHealth, sails, and cannons to determine overall size
-    /// </summary>
-    private float GetShipScale(Unit unit)
-    {
-        // Normalize each upgrade type to 0-1 range
-        float healthProgress = Mathf.Clamp01((unit.maxHealth - 10f) / 20f); // 10-30 → 0-1
-        float sailProgress = Mathf.Clamp01(unit.sails / 5f); // 0-5 → 0-1
-        float cannonProgress = Mathf.Clamp01((unit.cannons - 2f) / 5f); // 2-7 → 0-1
-
-        // Combined progress (weighted average: health 40%, sails 30%, cannons 30%)
-        float overallProgress = (healthProgress * 0.4f) + (sailProgress * 0.3f) + (cannonProgress * 0.3f);
-
-        // Scale from 0.5 to 0.95 (nearly filling tile when fully upgraded)
-        return Mathf.Lerp(0.5f, 0.95f, overallProgress);
-    }
-
-    /// <summary>
-    /// Get number of cannons to render per side based on visual tier
-    /// </summary>
-    private int GetCannonsPerSide(int cannonVisualTier)
-    {
-        switch (cannonVisualTier)
+        /// <summary>
+        /// Calculate sail visual tier (3 tiers from 0-5 upgrades)
+        /// Tier 1: 0-1 sail upgrades (small square sails)
+        /// Tier 2: 2-3 sail upgrades (larger triangular sails)
+        /// Tier 3: 4-5 sail upgrades (massive billowing sails)
+        /// </summary>
+        private int GetSailVisualTier(int sailUpgrades)
         {
-            case 1: return 2;  // 2 per side (4 total visible, but ship has 2-3)
-            case 2: return 4;  // 4 per side (8 total visible)
-            case 3: return 6;  // 6 per side (12 total visible)
-            default: return 2;
+            if (sailUpgrades <= 1) return 1;
+            if (sailUpgrades <= 3) return 2;
+            return 3; // 4-5 upgrades
+        }
+
+        /// <summary>
+        /// Calculate cannon visual tier (3 tiers from 2-7 total cannons)
+        /// Tier 1: 2-3 cannons (2 per side, small)
+        /// Tier 2: 4-5 cannons (4 per side, medium)
+        /// Tier 3: 6-7 cannons (6+ per side, large/varied)
+        /// </summary>
+        private int GetCannonVisualTier(int totalCannons)
+        {
+            if (totalCannons <= 3) return 1;
+            if (totalCannons <= 5) return 2;
+            return 3; // 6-7 cannons
+        }
+
+        /// <summary>
+        /// Calculate ship scale based on all upgrades (0.5 → 0.95 of tile size)
+        /// Combines maxHealth, sails, and cannons to determine overall size
+        /// </summary>
+        private float GetShipScale(Unit unit)
+        {
+            // Normalize each upgrade type to 0-1 range
+            float healthProgress = Mathf.Clamp01((unit.maxHealth - 10f) / 20f); // 10-30 → 0-1
+            float sailProgress = Mathf.Clamp01(unit.sails / 5f); // 0-5 → 0-1
+            float cannonProgress = Mathf.Clamp01((unit.cannons - 2f) / 5f); // 2-7 → 0-1
+
+            // Combined progress (weighted average: health 40%, sails 30%, cannons 30%)
+            float overallProgress = (healthProgress * 0.4f) + (sailProgress * 0.3f) + (cannonProgress * 0.3f);
+
+            // Scale from 0.5 to 0.95 (nearly filling tile when fully upgraded)
+            return Mathf.Lerp(0.5f, 0.95f, overallProgress);
+        }
+
+        /// <summary>
+        /// Get number of cannons to render per side based on visual tier
+        /// </summary>
+        private int GetCannonsPerSide(int cannonVisualTier)
+        {
+            switch (cannonVisualTier)
+            {
+                case 1: return 2;  // 2 per side (4 total visible, but ship has 2-3)
+                case 2: return 4;  // 4 per side (8 total visible)
+                case 3: return 6;  // 6 per side (12 total visible)
+                default: return 2;
+            }
         }
     }
 
