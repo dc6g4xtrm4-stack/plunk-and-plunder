@@ -61,7 +61,7 @@ namespace PlunkAndPlunder.Units
             this.facingAngle = 0f; // Default facing east
             this.movementRemaining = GetMovementCapacity(); // Initialize with full movement
             this.sails = 0; // Base ships have no sail upgrades
-            this.cannons = 0; // Base ships have no cannon upgrades
+            this.cannons = 2; // Base ships start with 2 cannons (Sloop equivalent)
             this.isInCombat = false;
             this.combatOpponentId = null;
 
