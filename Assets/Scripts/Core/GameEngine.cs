@@ -8,6 +8,7 @@ using PlunkAndPlunder.Players;
 using PlunkAndPlunder.Resolution;
 using PlunkAndPlunder.Structures;
 using PlunkAndPlunder.Units;
+using UnityEngine;
 
 namespace PlunkAndPlunder.Core
 {
@@ -344,7 +345,7 @@ namespace PlunkAndPlunder.Core
             }
 
             // Continue with adjacent combat resolution (existing logic)
-            var adjacentCombatEvents = turnResolver.ResolveAdjacentCombat();
+            var adjacentCombatEvents = turnResolver.ResolveCombatAfterMovement();
             allEvents.AddRange(adjacentCombatEvents);
 
             return allEvents;

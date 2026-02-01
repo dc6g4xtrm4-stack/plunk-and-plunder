@@ -511,16 +511,14 @@ namespace PlunkAndPlunder.Resolution
 
         /// <summary>
         /// Animates a contested tile creation event (trigger red pulse visual).
+        /// NOTE: Visual updates are handled by GameManager via OnAnimationStep event.
         /// </summary>
         private IEnumerator AnimateContestedTileCreated(ContestedTileCreatedEvent contestedEvent, GameState state)
         {
             Debug.Log($"[TurnAnimator] Animating contested tile created at {contestedEvent.tileCoord}");
 
-            // Update contested tile visuals on HexRenderer
-            if (hexRenderer != null)
-            {
-                hexRenderer.UpdateContestedTiles(state.contestedTiles);
-            }
+            // Trigger OnAnimationStep so GameManager can update visuals
+            OnAnimationStep?.Invoke(state);
 
             // Use combat pause delay for contested tile creation (it's a significant event)
             yield return new WaitForSeconds(combatPauseDelay);
@@ -528,16 +526,14 @@ namespace PlunkAndPlunder.Resolution
 
         /// <summary>
         /// Animates a contested tile resolution event (remove red pulse, show winner).
+        /// NOTE: Visual updates are handled by GameManager via OnAnimationStep event.
         /// </summary>
         private IEnumerator AnimateContestedTileResolved(ContestedTileResolvedEvent resolvedEvent, GameState state)
         {
             Debug.Log($"[TurnAnimator] Animating contested tile resolved at {resolvedEvent.tileCoord}");
 
-            // Update contested tile visuals on HexRenderer (remove pulse)
-            if (hexRenderer != null)
-            {
-                hexRenderer.UpdateContestedTiles(state.contestedTiles);
-            }
+            // Trigger OnAnimationStep so GameManager can update visuals
+            OnAnimationStep?.Invoke(state);
 
             // Brief pause to show resolution
             yield return new WaitForSeconds(eventPauseDelay);
