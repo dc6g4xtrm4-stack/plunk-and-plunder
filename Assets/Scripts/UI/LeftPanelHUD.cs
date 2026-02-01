@@ -84,14 +84,16 @@ namespace PlunkAndPlunder.UI
             layoutGroup.padding = new RectOffset(HUDStyles.PanelPadding, HUDStyles.PanelPadding,
                                                   HUDStyles.PanelPadding, HUDStyles.PanelPadding);
 
-            // Build sections - ACTION BUTTONS FIRST so they appear at top!
-            BuildActionButtonsSection();
+            // Build sections (without action buttons)
             BuildPlayerStatsSection();
             BuildUnitDetailsSection();
             BuildBuildQueueSection();
 
             // Initially hide build queue
             buildQueueSection.SetActive(false);
+
+            // Build action buttons as SEPARATE panel above the main panel
+            BuildActionButtonsSeparate();
 
             Debug.Log($"[LeftPanelHUD] Initialized at bottom-left: position={rectTransform.anchoredPosition}, size={rectTransform.sizeDelta}");
         }
@@ -325,15 +327,35 @@ namespace PlunkAndPlunder.UI
 
         #region Action Buttons Section
 
-        private void BuildActionButtonsSection()
+        private void BuildActionButtonsSeparate()
         {
-            actionButtonsSection = new GameObject("ActionButtonsSection", typeof(RectTransform));
-            actionButtonsSection.transform.SetParent(transform, false);
+            // Create as SIBLING to main panel, positioned ABOVE it
+            actionButtonsSection = new GameObject("ActionButtonsPanel", typeof(RectTransform));
+            actionButtonsSection.transform.SetParent(transform.parent, false); // Same parent as LeftPanelHUD
 
-            // Use RectTransform sizeDelta like other sections (NOT LayoutElement!)
             RectTransform rt = actionButtonsSection.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0, 250); // Fixed height for 5 buttons
 
+            // Anchor to BOTTOM-LEFT, just like main panel
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(0f, 0f);
+            rt.pivot = new Vector2(0f, 0f);
+
+            // Position ABOVE the main panel
+            float mainPanelHeight = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
+            float yOffset = HUDStyles.EdgeMargin + mainPanelHeight + 10; // 10px gap above main panel
+            rt.anchoredPosition = new Vector2(HUDStyles.EdgeMargin, yOffset);
+            rt.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, 250); // Fixed size
+
+            // Add background
+            Image bg = actionButtonsSection.AddComponent<Image>();
+            bg.color = HUDStyles.BackgroundColor;
+
+            // Add border
+            Outline outline = actionButtonsSection.AddComponent<Outline>();
+            outline.effectColor = HUDStyles.BorderColor;
+            outline.effectDistance = new Vector2(2, -2);
+
+            // Layout
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
             layout.childControlHeight = false;
