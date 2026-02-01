@@ -96,13 +96,14 @@ namespace PlunkAndPlunder.Core
             Log($"[Unit {unitId} (Player {ownerId})] {action}");
         }
 
-        public static void LogCombat(string attackerName, string defenderName, HexCoord location, int damageToAttacker, int damageToDefender, List<int> attackerRolls, List<int> defenderRolls, string context = "")
+        /// <summary>
+        /// Log combat results (deterministic, no dice).
+        /// </summary>
+        public static void LogCombat(string attackerName, string defenderName, HexCoord location, int damageToAttacker, int damageToDefender, string context = "")
         {
             string tileId = $"#{Math.Abs(location.GetHashCode()) % 10000}";
             string contextStr = string.IsNullOrEmpty(context) ? "" : $" ({context})";
             Log($"COMBAT{contextStr}: {attackerName} vs {defenderName} at tile {tileId}");
-            Log($"  {attackerName} rolls: [{string.Join(", ", attackerRolls)}] = {SumList(attackerRolls)}");
-            Log($"  {defenderName} rolls: [{string.Join(", ", defenderRolls)}] = {SumList(defenderRolls)}");
             Log($"  Damage: {attackerName} -{damageToAttacker} HP, {defenderName} -{damageToDefender} HP");
         }
 

@@ -209,14 +209,13 @@ namespace PlunkAndPlunder.Core
         public string defenderId;
         public int damageToAttacker;
         public int damageToDefender;
-        public List<int> attackerRolls;
-        public List<int> defenderRolls;
         public bool attackerDestroyed;
         public bool defenderDestroyed;
 
+        // REMOVED: attackerRolls, defenderRolls - no more dice, deterministic combat only
+
         public CombatOccurredEvent(int turnNumber, string attackerId, string defenderId,
             int damageToAttacker, int damageToDefender,
-            List<int> attackerRolls, List<int> defenderRolls,
             bool attackerDestroyed, bool defenderDestroyed)
             : base(turnNumber, GameEventType.CombatOccurred,
                 $"Combat: {attackerId} vs {defenderId} - Damage: {damageToAttacker} to attacker, {damageToDefender} to defender")
@@ -225,8 +224,6 @@ namespace PlunkAndPlunder.Core
             this.defenderId = defenderId;
             this.damageToAttacker = damageToAttacker;
             this.damageToDefender = damageToDefender;
-            this.attackerRolls = attackerRolls;
-            this.defenderRolls = defenderRolls;
             this.attackerDestroyed = attackerDestroyed;
             this.defenderDestroyed = defenderDestroyed;
         }

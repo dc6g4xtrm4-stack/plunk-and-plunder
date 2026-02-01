@@ -32,8 +32,8 @@ namespace PlunkAndPlunder.Resolution
             this.structureManager = structureManager;
             this.enableLogging = enableLogging;
             this.deferUnitRemoval = deferUnitRemoval;
-            // Initialize combat resolver with a seed based on system time
-            this.combatResolver = new CombatResolver(UnityEngine.Random.Range(0, int.MaxValue));
+            // Initialize combat resolver with unit manager (deterministic combat, no seed needed)
+            this.combatResolver = new CombatResolver(unitManager);
         }
 
         /// <summary>
@@ -762,8 +762,6 @@ namespace PlunkAndPlunder.Resolution
                 unit2.id,
                 result.damageToAttacker,
                 result.damageToDefender,
-                result.attackerRolls,
-                result.defenderRolls,
                 attackerDestroyed,
                 defenderDestroyed
             ));
@@ -780,7 +778,7 @@ namespace PlunkAndPlunder.Resolution
             }
 
             // Log combat to file with narrative description
-            GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls, context);
+            GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, context);
 
             if (enableLogging)
             {
@@ -950,14 +948,12 @@ namespace PlunkAndPlunder.Resolution
                     unit2.id,
                     result.damageToAttacker,
                     result.damageToDefender,
-                    result.attackerRolls,
-                    result.defenderRolls,
                     attackerDestroyed,
                     defenderDestroyed
                 ));
 
                 // Log combat to file with narrative description
-                GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, result.attackerRolls, result.defenderRolls, $"battle to the death - round {roundNumber}");
+                GameLogger.LogCombat(unit1Name, unit2Name, location, result.damageToAttacker, result.damageToDefender, $"battle to the death - round {roundNumber}");
 
                 if (enableLogging)
                 {

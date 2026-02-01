@@ -40,7 +40,7 @@ namespace PlunkAndPlunder.Core
         private CombatResultsUI combatResultsUI;
         private CollisionYieldUI collisionYieldUI;
         private EncounterUI encounterUI; // NEW: Encounter system UI
-        private DiceCombatUI diceCombatUI;
+        private CombatResultsHUD combatResultsHUD; // NEW: Deterministic combat results display
         private PlayerStatsHUD playerStatsHUD;
 
         // Combat tracking
@@ -149,10 +149,11 @@ namespace PlunkAndPlunder.Core
                 encounterUI = encounterUIObj.AddComponent<EncounterUI>();
                 encounterUI.Initialize(0); // Local player ID (human player is always 0 in offline mode)
 
-                GameObject diceCombatUIObj = new GameObject("DiceCombatUI");
-                diceCombatUIObj.transform.SetParent(canvas.transform, false);
-                diceCombatUI = diceCombatUIObj.AddComponent<DiceCombatUI>();
-                diceCombatUI.Initialize();
+                // NEW: Initialize CombatResultsHUD for deterministic combat
+                GameObject combatResultsHUDObj = new GameObject("CombatResultsHUD");
+                combatResultsHUDObj.transform.SetParent(canvas.transform, false);
+                combatResultsHUD = combatResultsHUDObj.AddComponent<CombatResultsHUD>();
+                combatResultsHUD.Initialize();
 
                 GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
                 playerStatsHUDObj.transform.SetParent(canvas.transform, false);
@@ -740,21 +741,22 @@ namespace PlunkAndPlunder.Core
             }
             else
             {
-                // Show dice combat UI (human player involved)
-                if (diceCombatUI != null)
+                // Show combat results HUD (human player involved)
+                if (combatResultsHUD != null)
                 {
-                    diceCombatUI.ShowCombat(combatEvent, attacker, defender, roundNumber, OnCombatResultsContinue, state.playerManager);
+                    combatResultsHUD.ShowCombatResult(combatEvent, state);
 
                     // Increment round number for next combat between these units
                     combatRounds[combatKey] = roundNumber + 1;
+
+                    // Auto-resume after HUD auto-hides (3 seconds)
+                    StartCoroutine(AutoResumeCombatAfterDelay(3.1f));
                 }
-                else
+                else if (combatResultsUI != null)
                 {
-                    // Fallback to old UI if dice UI not available
-                    if (combatResultsUI != null)
-                    {
-                        combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue, state.playerManager);
-                    }
+                    // OLD: Fallback to old UI (will be removed)
+                    combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue, state.playerManager);
+                }
                 }
             }
 
@@ -785,6 +787,14 @@ namespace PlunkAndPlunder.Core
             // Wait briefly to simulate combat happening
             yield return new WaitForSeconds(0.1f);
             Debug.Log("[GameManager] Auto-resolve: continuing after combat");
+            turnAnimator.ResumeAnimation();
+        }
+
+        private IEnumerator AutoResumeCombatAfterDelay(float delay)
+        {
+            // Wait for CombatResultsHUD to auto-hide
+            yield return new WaitForSeconds(delay);
+            Debug.Log("[GameManager] CombatResultsHUD auto-hidden, resuming animation");
             turnAnimator.ResumeAnimation();
         }
 

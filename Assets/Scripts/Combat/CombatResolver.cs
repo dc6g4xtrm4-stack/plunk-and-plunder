@@ -1,105 +1,91 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using PlunkAndPlunder.Units;
 using UnityEngine;
 
 namespace PlunkAndPlunder.Combat
 {
     /// <summary>
-    /// Resolves combat between units using dice rolls
+    /// Resolves combat deterministically - no dice, pure strategy.
+    /// Each ship deals damage equal to its cannons.
     /// </summary>
     public class CombatResolver
     {
-        private System.Random rng;
+        private UnitManager unitManager;
 
-        public CombatResolver(int seed)
+        public CombatResolver(UnitManager unitManager)
         {
-            this.rng = new System.Random(seed);
+            this.unitManager = unitManager;
         }
 
         /// <summary>
-        /// Resolve combat between attacker and defender using dice rolls
-        /// Cannons upgrades add bonus damage to successful hits
+        /// Resolves combat deterministically between two units.
+        /// Each ship shoots its cannons, dealing that much damage.
+        /// NO RANDOMNESS - what you see is what you get.
         /// </summary>
+        /// <param name="attackerId">First unit ID</param>
+        /// <param name="defenderId">Second unit ID</param>
+        /// <param name="attackerCannons">DEPRECATED - now uses unit.cannons directly</param>
+        /// <param name="defenderCannons">DEPRECATED - now uses unit.cannons directly</param>
+        /// <returns>Combat result with damage dealt</returns>
         public CombatResult ResolveCombat(string attackerId, string defenderId, int attackerCannons = 0, int defenderCannons = 0)
         {
-            // Attacker rolls 3 dice
-            List<int> attackerRolls = RollDice(3);
+            Unit attacker = unitManager.GetUnit(attackerId);
+            Unit defender = unitManager.GetUnit(defenderId);
 
-            // Defender rolls 2 dice
-            List<int> defenderRolls = RollDice(2);
-
-            // Sort both in descending order to get highest values
-            attackerRolls.Sort((a, b) => b.CompareTo(a));
-            defenderRolls.Sort((a, b) => b.CompareTo(a));
-
-            // Take highest 2 from attacker
-            List<int> attackerTop2 = attackerRolls.Take(2).ToList();
-            List<int> defenderTop2 = defenderRolls.Take(2).ToList();
-
-            int attackerDamage = 0;
-            int defenderDamage = 0;
-
-            // Compare pairwise (highest vs highest, second vs second)
-            // Defender wins ties
-            for (int i = 0; i < 2; i++)
+            if (attacker == null || defender == null)
             {
-                if (attackerTop2[i] > defenderTop2[i])
+                Debug.LogError($"[CombatResolver] Cannot resolve combat - unit not found (attacker: {attackerId}, defender: {defenderId})");
+                return new CombatResult
                 {
-                    // Attacker wins this comparison - defender takes base 2 damage plus cannon bonus
-                    defenderDamage += 2 + attackerCannons;
-                }
-                else
-                {
-                    // Defender wins this comparison (including ties) - attacker takes base 2 damage plus cannon bonus
-                    attackerDamage += 2 + defenderCannons;
-                }
+                    attackerId = attackerId,
+                    defenderId = defenderId,
+                    damageToAttacker = 0,
+                    damageToDefender = 0
+                };
             }
+
+            // Deterministic damage: each ship shoots its cannons
+            int damageToDefender = attacker.cannons;
+            int damageToAttacker = defender.cannons;
+
+            Debug.Log($"[CombatResolver] {attacker.id} ({attacker.cannons} cannons) vs " +
+                      $"{defender.id} ({defender.cannons} cannons) → " +
+                      $"Damage: {damageToDefender} to defender, {damageToAttacker} to attacker");
 
             return new CombatResult
             {
                 attackerId = attackerId,
                 defenderId = defenderId,
-                attackerRolls = attackerRolls,
-                defenderRolls = defenderRolls,
-                attackerTop2 = attackerTop2,
-                defenderTop2 = defenderTop2,
-                damageToAttacker = attackerDamage,
-                damageToDefender = defenderDamage
+                damageToAttacker = damageToAttacker,
+                damageToDefender = damageToDefender
             };
         }
 
         /// <summary>
-        /// Roll N dice (1-6)
+        /// Preview combat outcome without applying damage.
+        /// Useful for tactical UI showing potential outcomes.
         /// </summary>
-        private List<int> RollDice(int count)
+        public CombatResult PreviewCombat(string attackerId, string defenderId)
         {
-            List<int> rolls = new List<int>();
-            for (int i = 0; i < count; i++)
-            {
-                rolls.Add(rng.Next(1, 7)); // 1-6 inclusive
-            }
-            return rolls;
+            return ResolveCombat(attackerId, defenderId);
         }
     }
 
+    /// <summary>
+    /// Result of combat between two units.
+    /// SIMPLIFIED - no dice data, just damage numbers.
+    /// </summary>
     [Serializable]
     public class CombatResult
     {
         public string attackerId;
         public string defenderId;
-        public List<int> attackerRolls;
-        public List<int> defenderRolls;
-        public List<int> attackerTop2;
-        public List<int> defenderTop2;
         public int damageToAttacker;
         public int damageToDefender;
 
         public override string ToString()
         {
-            return $"Combat: {attackerId} vs {defenderId}\n" +
-                   $"Attacker rolls: [{string.Join(", ", attackerRolls)}] -> top 2: [{string.Join(", ", attackerTop2)}]\n" +
-                   $"Defender rolls: [{string.Join(", ", defenderRolls)}] -> top 2: [{string.Join(", ", defenderTop2)}]\n" +
+            return $"Combat: {attackerId} vs {defenderId} - " +
                    $"Damage: {damageToAttacker} to attacker, {damageToDefender} to defender";
         }
     }
