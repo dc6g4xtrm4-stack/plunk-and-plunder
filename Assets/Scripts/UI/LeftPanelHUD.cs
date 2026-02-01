@@ -84,11 +84,11 @@ namespace PlunkAndPlunder.UI
             layoutGroup.padding = new RectOffset(HUDStyles.PanelPadding, HUDStyles.PanelPadding,
                                                   HUDStyles.PanelPadding, HUDStyles.PanelPadding);
 
-            // Build sections
+            // Build sections - ACTION BUTTONS FIRST so they appear at top!
+            BuildActionButtonsSection();
             BuildPlayerStatsSection();
             BuildUnitDetailsSection();
             BuildBuildQueueSection();
-            BuildActionButtonsSection();
 
             // Initially hide build queue
             buildQueueSection.SetActive(false);
