@@ -38,7 +38,8 @@ namespace PlunkAndPlunder.Rendering
 
         public void RenderUnits(UnitManager unitManager)
         {
-            Debug.Log($"[UnitRenderer] RenderUnits called with {unitManager.GetAllUnits().Count} units");
+            // Verbose logging disabled for performance (called every animation frame)
+            // Debug.Log($"[UnitRenderer] RenderUnits called with {unitManager.GetAllUnits().Count} units");
 
             // Remove destroyed units
             List<string> toRemove = new List<string>();
@@ -86,10 +87,11 @@ namespace PlunkAndPlunder.Rendering
             // Apply stacking offsets for units on the same tile
             ApplyStackingOffsets(unitManager);
 
-            if (created > 0 || updated > 0)
-            {
-                Debug.Log($"[UnitRenderer] Rendered units: {created} created, {updated} updated, {unitObjects.Count} total");
-            }
+            // Verbose logging disabled for performance (called every animation frame)
+            // if (created > 0 || updated > 0)
+            // {
+            //     Debug.Log($"[UnitRenderer] Rendered units: {created} created, {updated} updated, {unitObjects.Count} total");
+            // }
         }
 
         private void CreateUnitObject(Unit unit)
@@ -106,10 +108,9 @@ namespace PlunkAndPlunder.Rendering
             // Rotation based on facing
             unitObj.transform.rotation = Quaternion.Euler(0, unit.facingAngle, 0);
 
-            // Create ship model with upgrade level based on maxHealth
-            int upgradeLevel = unit.maxHealth; // 1 = tier 1, 2 = tier 2, 3 = tier 3
-            CreateShipModel(unitObj, unit.ownerId, upgradeLevel);
-            unitUpgradeLevels[unit.id] = upgradeLevel;
+            // Create ship model with dynamic visual tiers
+            CreateShipModel(unitObj, unit);
+            unitUpgradeLevels[unit.id] = unit.maxHealth;
 
             // Create health bar
             CreateHealthBar(unit, unitObj);
@@ -117,17 +118,22 @@ namespace PlunkAndPlunder.Rendering
             unitObjects[unit.id] = unitObj;
         }
 
-        private void CreateShipModel(GameObject parent, int ownerId, int upgradeLevel = 1)
+        private void CreateShipModel(GameObject parent, Unit unit)
         {
-            Color playerColor = GetPlayerColor(ownerId);
+            Color playerColor = GetPlayerColor(unit.ownerId);
             Color brownHull = new Color(0.4f, 0.25f, 0.1f); // Brown wood color
             Color darkHull = new Color(0.3f, 0.2f, 0.08f); // Darker hull for cannons
             Color sailColor = playerColor; // Sails use player color
 
-            // Scale factors based on upgrade level
-            float scaleMultiplier = 1.0f;
-            if (upgradeLevel == 2) scaleMultiplier = 1.3f;
-            else if (upgradeLevel >= 3) scaleMultiplier = 1.6f;
+            // Calculate visual tiers based on upgrades
+            int sailTier = GetSailVisualTier(unit.sails);
+            int cannonTier = GetCannonVisualTier(unit.cannons);
+            float scaleMultiplier = GetShipScale(unit);
+
+            // Determine health tier for mast count (1-3 masts)
+            int healthTier = 1;
+            if (unit.maxHealth >= 21) healthTier = 3;
+            else if (unit.maxHealth >= 11) healthTier = 2;
 
             // 1. Create Hull (brown boat body) - stretched cube, scales with upgrade
             GameObject hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -147,37 +153,39 @@ namespace PlunkAndPlunder.Rendering
             bow.transform.localRotation = Quaternion.Euler(0, 45, 0);
             SetMaterialColor(bow, brownHull);
 
-            // 3. Create Mast(s) - number depends on upgrade level
-            if (upgradeLevel == 1)
+            // 3. Create Mast(s) - number depends on health tier, visual depends on sail tier
+            if (healthTier == 1)
             {
                 // Tier 1: Single mast
-                CreateMastWithSail(parent, new Vector3(0, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(0, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
             }
-            else if (upgradeLevel == 2)
+            else if (healthTier == 2)
             {
                 // Tier 2: Two masts
-                CreateMastWithSail(parent, new Vector3(-0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
-                CreateMastWithSail(parent, new Vector3(0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(-0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
+                CreateMastWithSail(parent, new Vector3(0.15f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
 
-                // Add cannons (2-3 small cylinders on sides)
-                CreateCannons(parent, 3, scaleMultiplier, darkHull);
+                // Add cannons based on cannon tier
+                int cannonsToRender = GetCannonsPerSide(cannonTier);
+                CreateCannons(parent, cannonsToRender, scaleMultiplier, darkHull);
             }
-            else if (upgradeLevel >= 3)
+            else if (healthTier >= 3)
             {
                 // Tier 3: Three masts
-                CreateMastWithSail(parent, new Vector3(-0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
-                CreateMastWithSail(parent, new Vector3(0, 0.4f, 0), 0.4f, sailColor, playerColor, brownHull, scaleMultiplier);
-                CreateMastWithSail(parent, new Vector3(0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier);
+                CreateMastWithSail(parent, new Vector3(-0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
+                CreateMastWithSail(parent, new Vector3(0, 0.4f, 0), 0.4f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
+                CreateMastWithSail(parent, new Vector3(0.25f * scaleMultiplier, 0.35f, 0), 0.35f, sailColor, playerColor, brownHull, scaleMultiplier, sailTier);
 
-                // Add more cannons (4-6 cylinders on sides)
-                CreateCannons(parent, 6, scaleMultiplier, darkHull);
+                // Add cannons based on cannon tier
+                int cannonsToRender = GetCannonsPerSide(cannonTier);
+                CreateCannons(parent, cannonsToRender, scaleMultiplier, darkHull);
 
                 // Add decorative elements - additional flags
                 CreateExtraFlags(parent, 2, scaleMultiplier, playerColor);
             }
         }
 
-        private void CreateMastWithSail(GameObject parent, Vector3 position, float mastHeight, Color sailColor, Color flagColor, Color mastColor, float scale)
+        private void CreateMastWithSail(GameObject parent, Vector3 position, float mastHeight, Color sailColor, Color flagColor, Color mastColor, float scale, int sailTier)
         {
             // Mast (vertical pole)
             GameObject mast = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -187,12 +195,34 @@ namespace PlunkAndPlunder.Rendering
             mast.transform.localScale = new Vector3(0.04f, mastHeight, 0.04f);
             SetMaterialColor(mast, mastColor);
 
-            // Sail (flat rectangle)
+            // Sail - size and shape varies by tier
             GameObject sail = GameObject.CreatePrimitive(PrimitiveType.Cube);
             sail.name = "Sail";
             sail.transform.SetParent(parent.transform);
             sail.transform.localPosition = position;
-            sail.transform.localScale = new Vector3(0.3f * scale, 0.4f, 0.05f);
+
+            // Tier-based sail dimensions
+            switch (sailTier)
+            {
+                case 1: // Small square sails (0-1 sail upgrades)
+                    sail.transform.localScale = new Vector3(0.3f * scale, 0.35f, 0.05f);
+                    break;
+                case 2: // Larger triangular-style sails (2-3 sail upgrades)
+                    sail.transform.localScale = new Vector3(0.4f * scale, 0.5f, 0.06f);
+                    // Make sail slightly transparent for "billowing" effect
+                    break;
+                case 3: // Massive billowing sails (4-5 sail upgrades)
+                    sail.transform.localScale = new Vector3(0.5f * scale, 0.65f, 0.08f);
+                    // Add secondary sail layer for depth
+                    GameObject sailLayer2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    sailLayer2.name = "Sail_Layer2";
+                    sailLayer2.transform.SetParent(parent.transform);
+                    sailLayer2.transform.localPosition = position + new Vector3(0, 0, -0.06f);
+                    sailLayer2.transform.localScale = new Vector3(0.45f * scale, 0.6f, 0.06f);
+                    Color layer2Color = new Color(sailColor.r * 0.9f, sailColor.g * 0.9f, sailColor.b * 0.9f, 0.8f);
+                    SetMaterialColor(sailLayer2, layer2Color);
+                    break;
+            }
             SetMaterialColor(sail, sailColor);
 
             // Flag at top
@@ -277,7 +307,8 @@ namespace PlunkAndPlunder.Rendering
                 Vector3 worldPos = unit.position.ToWorldPosition(hexSize);
                 worldPos.y = unitHeight;
                 unitObj.transform.position = worldPos;
-                Debug.Log($"[UnitRenderer] Updated unit {unit.id} position to {unit.position} (world: {worldPos})");
+                // Verbose logging disabled for performance (called every animation frame)
+                // Debug.Log($"[UnitRenderer] Updated unit {unit.id} position to {unit.position} (world: {worldPos})");
 
                 // Update rotation based on facing direction
                 unitObj.transform.rotation = Quaternion.Euler(0, unit.facingAngle, 0);
@@ -619,6 +650,68 @@ namespace PlunkAndPlunder.Rendering
             healthBars.Clear();
 
             HideSelectionIndicator();
+        }
+    }
+
+    // ====================
+    // VISUAL TIER CALCULATION SYSTEM
+    // ====================
+
+    /// <summary>
+    /// Calculate sail visual tier (3 tiers from 0-5 upgrades)
+    /// Tier 1: 0-1 sail upgrades (small square sails)
+    /// Tier 2: 2-3 sail upgrades (larger triangular sails)
+    /// Tier 3: 4-5 sail upgrades (massive billowing sails)
+    /// </summary>
+    private int GetSailVisualTier(int sailUpgrades)
+    {
+        if (sailUpgrades <= 1) return 1;
+        if (sailUpgrades <= 3) return 2;
+        return 3; // 4-5 upgrades
+    }
+
+    /// <summary>
+    /// Calculate cannon visual tier (3 tiers from 2-7 total cannons)
+    /// Tier 1: 2-3 cannons (2 per side, small)
+    /// Tier 2: 4-5 cannons (4 per side, medium)
+    /// Tier 3: 6-7 cannons (6+ per side, large/varied)
+    /// </summary>
+    private int GetCannonVisualTier(int totalCannons)
+    {
+        if (totalCannons <= 3) return 1;
+        if (totalCannons <= 5) return 2;
+        return 3; // 6-7 cannons
+    }
+
+    /// <summary>
+    /// Calculate ship scale based on all upgrades (0.5 → 0.95 of tile size)
+    /// Combines maxHealth, sails, and cannons to determine overall size
+    /// </summary>
+    private float GetShipScale(Unit unit)
+    {
+        // Normalize each upgrade type to 0-1 range
+        float healthProgress = Mathf.Clamp01((unit.maxHealth - 10f) / 20f); // 10-30 → 0-1
+        float sailProgress = Mathf.Clamp01(unit.sails / 5f); // 0-5 → 0-1
+        float cannonProgress = Mathf.Clamp01((unit.cannons - 2f) / 5f); // 2-7 → 0-1
+
+        // Combined progress (weighted average: health 40%, sails 30%, cannons 30%)
+        float overallProgress = (healthProgress * 0.4f) + (sailProgress * 0.3f) + (cannonProgress * 0.3f);
+
+        // Scale from 0.5 to 0.95 (nearly filling tile when fully upgraded)
+        return Mathf.Lerp(0.5f, 0.95f, overallProgress);
+    }
+
+    /// <summary>
+    /// Get number of cannons to render per side based on visual tier
+    /// </summary>
+    private int GetCannonsPerSide(int cannonVisualTier)
+    {
+        switch (cannonVisualTier)
+        {
+            case 1: return 2;  // 2 per side (4 total visible, but ship has 2-3)
+            case 2: return 4;  // 4 per side (8 total visible)
+            case 3: return 6;  // 6 per side (12 total visible)
+            default: return 2;
         }
     }
 
