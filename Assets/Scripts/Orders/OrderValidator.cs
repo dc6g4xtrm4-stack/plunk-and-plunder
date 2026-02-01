@@ -76,6 +76,18 @@ namespace PlunkAndPlunder.Orders
                 }
             }
 
+            // Check destination tile for enemy shipyard
+            HexCoord destination = order.path[order.path.Count - 1];
+            Structure structureAtDest = structureManager?.GetStructureAtPosition(destination);
+
+            if (structureAtDest != null &&
+                structureAtDest.type == StructureType.SHIPYARD &&
+                structureAtDest.ownerId != order.playerId)
+            {
+                error = "Cannot move into a harbor occupied by an enemy shipyard";
+                return false;
+            }
+
             return true;
         }
 

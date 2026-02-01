@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using PlunkAndPlunder.Map;
+using UnityEngine;
 
 namespace PlunkAndPlunder.Structures
 {
@@ -27,8 +28,34 @@ namespace PlunkAndPlunder.Structures
             this.ownerId = ownerId;
             this.position = position;
             this.type = type;
-            this.health = 1; // MVP: simple health
-            this.maxHealth = 1;
+
+            // Initialize health based on structure type
+            if (type == StructureType.SHIPYARD)
+            {
+                this.health = 3;      // Shipyards start with 3 HP
+                this.maxHealth = 3;   // Takes 3 attacks to capture
+            }
+            else
+            {
+                this.health = 1;      // Other structures (if added later)
+                this.maxHealth = 1;
+            }
+        }
+
+        /// <summary>
+        /// Apply damage to structure
+        /// </summary>
+        public void TakeDamage(int amount)
+        {
+            health = Mathf.Max(0, health - amount);
+        }
+
+        /// <summary>
+        /// Check if structure is destroyed (0 HP)
+        /// </summary>
+        public bool IsDestroyed()
+        {
+            return health <= 0;
         }
     }
 

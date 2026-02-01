@@ -37,15 +37,17 @@ namespace PlunkAndPlunder.Core
         CollisionDetected,
         CollisionNeedsResolution,
         CollisionResolved,
-        ShipyardAttacked,
-        ShipyardDestroyed,
+        ShipyardAttacked, // DEPRECATED: Use StructureAttacked instead
+        ShipyardDestroyed, // DEPRECATED: Use StructureCaptured instead
         ConstructionProgressed, // NEW: Construction system event
         GoldEarned, // NEW: Income system event
         EncounterDetected, // NEW: Encounter system event
         EncounterNeedsResolution, // NEW: Encounter system event
         EncounterResolved, // NEW: Encounter system event
         ContestedTileCreated, // NEW: Encounter system event
-        ContestedTileResolved // NEW: Encounter system event
+        ContestedTileResolved, // NEW: Encounter system event
+        StructureAttacked, // NEW: Deterministic structure damage
+        StructureCaptured // NEW: Structure ownership changed
     }
 
     [Serializable]
@@ -325,6 +327,60 @@ namespace PlunkAndPlunder.Core
         {
             this.shipyardId = shipyardId;
             this.ownerId = ownerId;
+            this.position = position;
+            this.attackerUnitId = attackerUnitId;
+        }
+    }
+
+    /// <summary>
+    /// NEW: Deterministic structure attack event (replaces dice-based ShipyardAttackedEvent)
+    /// </summary>
+    [Serializable]
+    public class StructureAttackedEvent : GameEvent
+    {
+        public string attackerUnitId;
+        public string structureId;
+        public int attackingPlayerId;
+        public int defendingPlayerId;
+        public HexCoord position;
+        public int oldHealth;
+        public int newHealth;
+
+        public StructureAttackedEvent(int turnNumber, string attackerUnitId, string structureId,
+            int attackingPlayerId, int defendingPlayerId, HexCoord position, int oldHealth, int newHealth)
+            : base(turnNumber, GameEventType.StructureAttacked,
+                $"Player {attackingPlayerId} attacked shipyard at {position} ({oldHealth} HP → {newHealth} HP)")
+        {
+            this.attackerUnitId = attackerUnitId;
+            this.structureId = structureId;
+            this.attackingPlayerId = attackingPlayerId;
+            this.defendingPlayerId = defendingPlayerId;
+            this.position = position;
+            this.oldHealth = oldHealth;
+            this.newHealth = newHealth;
+        }
+    }
+
+    /// <summary>
+    /// NEW: Structure ownership changed (capture after health reaches 0)
+    /// </summary>
+    [Serializable]
+    public class StructureCapturedEvent : GameEvent
+    {
+        public string structureId;
+        public int previousOwnerId;
+        public int newOwnerId;
+        public HexCoord position;
+        public string attackerUnitId;
+
+        public StructureCapturedEvent(int turnNumber, string structureId,
+            int previousOwnerId, int newOwnerId, HexCoord position, string attackerUnitId)
+            : base(turnNumber, GameEventType.StructureCaptured,
+                $"Player {newOwnerId} captured shipyard from Player {previousOwnerId} at {position}!")
+        {
+            this.structureId = structureId;
+            this.previousOwnerId = previousOwnerId;
+            this.newOwnerId = newOwnerId;
             this.position = position;
             this.attackerUnitId = attackerUnitId;
         }

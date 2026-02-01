@@ -1977,80 +1977,69 @@ namespace PlunkAndPlunder.Resolution
                     }
                 }
 
-                // Roll 1d6 for attack
-                System.Random rng = new System.Random(turnNumber + attackerShip.id.GetHashCode() + order.targetPosition.GetHashCode());
-                int diceRoll = rng.Next(1, 7); // 1-6
+                // DETERMINISTIC ATTACK: Deal 1 damage to shipyard
+                int oldHealth = targetShipyard.health;
+                targetShipyard.TakeDamage(1);
+                int newHealth = targetShipyard.health;
 
-                bool attackSuccess = (diceRoll >= 5); // 5 or 6 = success
-
-                // Create attack event
-                events.Add(new ShipyardAttackedEvent(
+                // Create structure attacked event
+                events.Add(new StructureAttackedEvent(
                     turnNumber,
                     order.unitId,
                     targetShipyard.id,
                     order.playerId,
                     targetShipyard.ownerId,
                     order.targetPosition,
-                    diceRoll,
-                    attackSuccess
+                    oldHealth,
+                    newHealth
                 ));
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Player {order.playerId} ship {order.unitId} attacks shipyard {targetShipyard.id} at {order.targetPosition}: rolled {diceRoll} - {(attackSuccess ? "SUCCESS" : "FAILED")}");
+                    Debug.Log($"[TurnResolver] Player {order.playerId} ship {order.unitId} attacks shipyard {targetShipyard.id}: {oldHealth} HP → {newHealth} HP");
                 }
 
-                if (attackSuccess)
+                // Check if shipyard is captured (health reached 0)
+                if (targetShipyard.IsDestroyed())
                 {
-                    // Shipyard is destroyed
-                    events.Add(new ShipyardDestroyedEvent(
+                    // Capture the shipyard - change ownership
+                    int oldOwnerId = targetShipyard.ownerId;
+                    structureManager.ChangeOwner(targetShipyard.id, order.playerId);
+
+                    // Reset health to full after capture
+                    targetShipyard.health = targetShipyard.maxHealth;
+
+                    // Create structure captured event
+                    events.Add(new StructureCapturedEvent(
                         turnNumber,
                         targetShipyard.id,
-                        targetShipyard.ownerId,
+                        oldOwnerId,
+                        order.playerId,
                         order.targetPosition,
                         order.unitId
                     ));
 
-                    // Remove the shipyard structure
-                    structureManager.RemoveStructure(targetShipyard.id);
-
-                    // Move ship into the shipyard position
-                    HexCoord from = attackerShip.position;
-                    attackerShip.position = order.targetPosition;
-
-                    // Create move event for the ship moving into the destroyed shipyard's position
-                    List<HexCoord> finalPath = new List<HexCoord> { from, order.targetPosition };
-                    events.Add(new UnitMovedEvent(
-                        turnNumber,
-                        order.unitId,
-                        from,
-                        order.targetPosition,
-                        finalPath,
-                        false,
-                        null,
-                        1, // Used 1 movement to enter
-                        attackerShip.movementRemaining - 1
-                    ));
-
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] Shipyard {targetShipyard.id} destroyed! Ship {order.unitId} moved into position {order.targetPosition}");
+                        Debug.Log($"[TurnResolver] Shipyard {targetShipyard.id} CAPTURED by player {order.playerId}! Health reset to {targetShipyard.maxHealth}");
                     }
+
+                    // Log to game logger
+                    GameLogger.LogPlayerAction(order.playerId,
+                        $"Ship {order.unitId} captured enemy shipyard at {order.targetPosition} after 3 attacks!");
                 }
                 else
                 {
-                    // Attack failed - ship stays where it is
+                    // Shipyard still has health remaining
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] Attack failed - ship {order.unitId} remains at {attackerShip.position}");
+                        Debug.Log($"[TurnResolver] Shipyard {targetShipyard.id} damaged but still standing ({newHealth}/{targetShipyard.maxHealth} HP)");
                     }
-                }
 
-                // Log to game logger
-                GameLogger.LogPlayerAction(order.playerId,
-                    attackSuccess
-                        ? $"Ship {order.unitId} rolled {diceRoll} and destroyed enemy shipyard at {order.targetPosition}"
-                        : $"Ship {order.unitId} rolled {diceRoll} and failed to destroy enemy shipyard at {order.targetPosition}");
+                    // Log to game logger
+                    GameLogger.LogPlayerAction(order.playerId,
+                        $"Ship {order.unitId} attacked enemy shipyard at {order.targetPosition} ({newHealth}/{targetShipyard.maxHealth} HP remaining)");
+                }
             }
 
             return events;
