@@ -330,9 +330,10 @@ namespace PlunkAndPlunder.UI
             actionButtonsSection = new GameObject("ActionButtonsSection", typeof(RectTransform));
             actionButtonsSection.transform.SetParent(transform, false);
 
-            // Expand to fill remaining space
+            // Use preferred height instead of flexible (prevents pushing to bottom)
             LayoutElement le = actionButtonsSection.AddComponent<LayoutElement>();
-            le.flexibleHeight = 1f;
+            le.preferredHeight = 250f; // Enough space for 5 buttons
+            le.flexibleHeight = 0f; // Don't expand to fill space
 
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft; // Position buttons at top, not bottom
