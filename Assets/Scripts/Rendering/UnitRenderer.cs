@@ -329,7 +329,7 @@ namespace PlunkAndPlunder.Rendering
                         }
 
                         // Recreate ship with new upgrade level
-                        CreateShipModel(unitObj, unit.ownerId, currentUpgradeLevel);
+                        CreateShipModel(unitObj, unit);
                         unitUpgradeLevels[unit.id] = currentUpgradeLevel;
                     }
                 }
@@ -468,8 +468,7 @@ namespace PlunkAndPlunder.Rendering
                         }
 
                         // Recreate ship with correct colors and upgrade level
-                        int upgradeLevel = unit.maxHealth;
-                        CreateShipModel(unitObj, unit.ownerId, upgradeLevel);
+                        CreateShipModel(unitObj, unit);
                     }
                 }
             }
