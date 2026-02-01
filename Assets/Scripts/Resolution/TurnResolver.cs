@@ -732,8 +732,18 @@ namespace PlunkAndPlunder.Resolution
             CombatResult result = combatResolver.ResolveCombat(unit1.id, unit2.id, unit1.cannons, unit2.cannons);
 
             // Apply damage
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] BEFORE damage: {unit1.id} = {unit1.health} HP, {unit2.id} = {unit2.health} HP");
+            }
+
             unit1.TakeDamage(result.damageToAttacker);
             unit2.TakeDamage(result.damageToDefender);
+
+            if (enableLogging)
+            {
+                Debug.Log($"[TurnResolver] AFTER damage: {unit1.id} = {unit1.health} HP, {unit2.id} = {unit2.health} HP");
+            }
 
             bool attackerDestroyed = unit1.IsDead();
             bool defenderDestroyed = unit2.IsDead();
