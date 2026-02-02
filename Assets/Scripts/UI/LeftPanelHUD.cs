@@ -157,9 +157,9 @@ namespace PlunkAndPlunder.UI
 
             playerStatsText.text = sb.ToString().TrimEnd();
 
-            // Adjust section height
+            // Adjust section height (cap at 220px to leave room for other sections)
             int playerCount = players.Count;
-            float height = 50 + (playerCount * 70);
+            float height = Mathf.Min(50 + (playerCount * 70), 220);
             RectTransform rt = playerStatsSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(rt.sizeDelta.x, height);
 

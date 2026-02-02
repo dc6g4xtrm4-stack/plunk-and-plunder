@@ -41,8 +41,8 @@ namespace PlunkAndPlunder.UI
         public const int ButtonSpacing = 10;
 
         // Section Heights
-        public const int UnitDetailsSectionHeight = 300;
-        public const int BuildQueueSectionHeight = 250;
+        public const int UnitDetailsSectionHeight = 200;
+        public const int BuildQueueSectionHeight = 200;
 
         // Pass Turn Button
         public const int PassTurnButtonWidth = 200;
