@@ -25,6 +25,19 @@ namespace PlunkAndPlunder.UI
             BuildTopBar();
         }
 
+        private void Update()
+        {
+            // Spacebar hotkey for Pass Turn
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                // Only trigger if button is enabled and interactable
+                if (passTurnButton != null && passTurnButton.interactable)
+                {
+                    OnPassTurnClicked();
+                }
+            }
+        }
+
         private void BuildTopBar()
         {
             // Setup RectTransform for top-center positioning
@@ -139,7 +152,7 @@ namespace PlunkAndPlunder.UI
             buttonTextObj.transform.SetParent(buttonObj.transform, false);
 
             passTurnButtonText = buttonTextObj.AddComponent<Text>();
-            passTurnButtonText.text = "PASS TURN";
+            passTurnButtonText.text = "PASS TURN (Space)";
             passTurnButtonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             passTurnButtonText.fontSize = HUDStyles.ButtonFontSize;
             passTurnButtonText.color = HUDStyles.TextColor;
