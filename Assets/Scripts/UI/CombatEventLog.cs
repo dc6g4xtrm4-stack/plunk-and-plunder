@@ -306,9 +306,10 @@ namespace PlunkAndPlunder.UI
 
         private void UpdatePanelSize()
         {
+            RectTransform panelRT = panel.GetComponent<RectTransform>();
+
             if (isMinimized)
             {
-                RectTransform panelRT = panel.GetComponent<RectTransform>();
                 panelRT.sizeDelta = new Vector2(panelWidth, 50); // Just header
                 return;
             }
@@ -317,7 +318,6 @@ namespace PlunkAndPlunder.UI
             float contentHeight = visibleEntries * (entryHeight + 3f) + 10f; // Include spacing and padding
             float totalHeight = Mathf.Min(contentHeight + 40f, maxPanelHeight); // Add header height
 
-            RectTransform panelRT = panel.GetComponent<RectTransform>();
             panelRT.sizeDelta = new Vector2(panelWidth, totalHeight);
         }
 
