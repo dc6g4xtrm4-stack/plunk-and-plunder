@@ -105,6 +105,10 @@ namespace PlunkAndPlunder.UI
             RectTransform rt = playerStatsSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, 200);
 
+            LayoutElement layoutElement = playerStatsSection.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 100;
+            layoutElement.preferredHeight = 200;
+
             VerticalLayoutGroup layout = playerStatsSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
             layout.childControlHeight = false;
@@ -158,6 +162,12 @@ namespace PlunkAndPlunder.UI
             float height = 50 + (playerCount * 70);
             RectTransform rt = playerStatsSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(rt.sizeDelta.x, height);
+
+            LayoutElement layoutElement = playerStatsSection.GetComponent<LayoutElement>();
+            if (layoutElement != null)
+            {
+                layoutElement.preferredHeight = height;
+            }
         }
 
         #endregion
@@ -171,6 +181,10 @@ namespace PlunkAndPlunder.UI
 
             RectTransform rt = unitDetailsSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, HUDStyles.UnitDetailsSectionHeight);
+
+            LayoutElement layoutElement = unitDetailsSection.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 150;
+            layoutElement.preferredHeight = HUDStyles.UnitDetailsSectionHeight;
 
             VerticalLayoutGroup layout = unitDetailsSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
@@ -276,6 +290,10 @@ namespace PlunkAndPlunder.UI
             RectTransform rt = buildQueueSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, HUDStyles.BuildQueueSectionHeight);
 
+            LayoutElement layoutElement = buildQueueSection.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 100;
+            layoutElement.preferredHeight = HUDStyles.BuildQueueSectionHeight;
+
             VerticalLayoutGroup layout = buildQueueSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
             layout.childControlHeight = false;
@@ -338,6 +356,10 @@ namespace PlunkAndPlunder.UI
 
             RectTransform rt = actionButtonsSection.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, 420); // Fixed height - fits all 6 buttons properly (6*50 + 5*10 + header + padding)
+
+            LayoutElement layoutElement = actionButtonsSection.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 420;
+            layoutElement.preferredHeight = 420;
 
             // Layout
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
