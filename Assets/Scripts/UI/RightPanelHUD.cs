@@ -86,7 +86,11 @@ namespace PlunkAndPlunder.UI
             BuildTurnSummarySection();
             BuildCombatLogSection();
 
-            Debug.Log($"[RightPanelHUD] Initialized at bottom-right: anchor={rectTransform.anchorMin}, position={rectTransform.anchoredPosition}, size={rectTransform.sizeDelta}");
+            Debug.Log($"[RightPanelHUD] ===== INITIALIZED =====");
+            Debug.Log($"[RightPanelHUD] Position: anchor={rectTransform.anchorMin}, position={rectTransform.anchoredPosition}, size={rectTransform.sizeDelta}");
+            Debug.Log($"[RightPanelHUD] Screen: {Screen.width}x{Screen.height}");
+            Debug.Log($"[RightPanelHUD] Panel active: {gameObject.activeSelf}");
+            Debug.Log($"[RightPanelHUD] Combat log section active: {combatLogSection.activeSelf}");
         }
 
         #region Turn Summary Section
@@ -229,6 +233,8 @@ namespace PlunkAndPlunder.UI
 
         public void AddCombatEntry(CombatOccurredEvent combatEvent, GameState state)
         {
+            Debug.Log($"[RightPanelHUD] AddCombatEntry called - attacker:{combatEvent.attackerId} defender:{combatEvent.defenderId}");
+
             // Get unit details
             Unit attacker = state.unitManager.GetUnit(combatEvent.attackerId);
             Unit defender = state.unitManager.GetUnit(combatEvent.defenderId);
@@ -238,6 +244,8 @@ namespace PlunkAndPlunder.UI
                 Debug.LogWarning($"[RightPanelHUD] Could not find units for combat log: {combatEvent.attackerId} or {combatEvent.defenderId}");
                 return;
             }
+
+            Debug.Log($"[RightPanelHUD] Units found - creating entry");
 
             // Check if should show (filter AI combats if disabled)
             bool humanInvolved = attacker.ownerId == 0 || defender.ownerId == 0;
@@ -279,6 +287,7 @@ namespace PlunkAndPlunder.UI
 
             // Create UI entry
             CreateCombatEntryUI(entry);
+            Debug.Log($"[RightPanelHUD] Created UI entry, total entries: {combatEntries.Count}");
 
             // Auto-scroll to latest
             if (autoScrollToLatest)
@@ -289,6 +298,7 @@ namespace PlunkAndPlunder.UI
 
             // Update turn summary
             UpdateTurnSummary(state);
+            Debug.Log($"[RightPanelHUD] Entry added successfully");
         }
 
         private void CreateCombatEntryUI(CombatLogEntry entry)
