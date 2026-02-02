@@ -316,23 +316,29 @@ namespace PlunkAndPlunder.UI
             entryObj.transform.SetParent(contentContainer.transform, false);
 
             RectTransform entryRT = entryObj.AddComponent<RectTransform>();
-            entryRT.sizeDelta = new Vector2(0, 60);
 
             // Background
             Image entryBg = entryObj.AddComponent<Image>();
             entryBg.color = new Color(0.1f, 0.1f, 0.12f, 0.9f);
 
-            // Layout group for stacking text
-            VerticalLayoutGroup entryLayout = entryObj.AddComponent<VerticalLayoutGroup>();
-            entryLayout.childAlignment = TextAnchor.UpperLeft;
-            entryLayout.childControlHeight = false;
-            entryLayout.childControlWidth = true;
-            entryLayout.spacing = 2;
-            entryLayout.padding = new RectOffset(8, 8, 5, 5);
+            // Layout element for proper sizing in parent's VerticalLayoutGroup
+            LayoutElement entryLayoutElement = entryObj.AddComponent<LayoutElement>();
+            entryLayoutElement.minHeight = 70;
+            entryLayoutElement.preferredHeight = 70;
+
+            // Layout group for stacking text - DISABLED, use manual positioning instead
+            // VerticalLayoutGroup causes positioning issues, use simple stacking
 
             // Main combat text line 1: "Attacker → Defender"
-            GameObject line1Obj = new GameObject("Line1", typeof(RectTransform));
+            GameObject line1Obj = new GameObject("Line1");
             line1Obj.transform.SetParent(entryObj.transform, false);
+
+            RectTransform line1RT = line1Obj.AddComponent<RectTransform>();
+            line1RT.anchorMin = new Vector2(0, 1);
+            line1RT.anchorMax = new Vector2(1, 1);
+            line1RT.pivot = new Vector2(0, 1);
+            line1RT.anchoredPosition = new Vector2(8, -5);
+            line1RT.sizeDelta = new Vector2(-16, 20);
 
             Text line1Text = line1Obj.AddComponent<Text>();
             line1Text.text = $"{GetCombatIcon(entry)} {entry.attackerName} → {entry.defenderName}";
@@ -342,19 +348,16 @@ namespace PlunkAndPlunder.UI
             line1Text.color = GetEntryColor(entry);
             line1Text.alignment = TextAnchor.MiddleLeft;
 
-            RectTransform line1RT = line1Obj.GetComponent<RectTransform>();
-            line1RT.anchorMin = new Vector2(0, 0);
-            line1RT.anchorMax = new Vector2(1, 0);
-            line1RT.pivot = new Vector2(0, 0);
-            line1RT.sizeDelta = new Vector2(0, 20);
-
-            LayoutElement line1Layout = line1Obj.AddComponent<LayoutElement>();
-            line1Layout.minHeight = 20;
-            line1Layout.preferredHeight = 20;
-
             // Line 2: Outcome
-            GameObject line2Obj = new GameObject("Line2", typeof(RectTransform));
+            GameObject line2Obj = new GameObject("Line2");
             line2Obj.transform.SetParent(entryObj.transform, false);
+
+            RectTransform line2RT = line2Obj.AddComponent<RectTransform>();
+            line2RT.anchorMin = new Vector2(0, 1);
+            line2RT.anchorMax = new Vector2(1, 1);
+            line2RT.pivot = new Vector2(0, 1);
+            line2RT.anchoredPosition = new Vector2(8, -27);
+            line2RT.sizeDelta = new Vector2(-16, 18);
 
             Text line2Text = line2Obj.AddComponent<Text>();
             line2Text.text = $"   {GetOutcomeText(entry)}";
@@ -363,19 +366,16 @@ namespace PlunkAndPlunder.UI
             line2Text.color = new Color(0.9f, 0.9f, 0.9f);
             line2Text.alignment = TextAnchor.MiddleLeft;
 
-            RectTransform line2RT = line2Obj.GetComponent<RectTransform>();
-            line2RT.anchorMin = new Vector2(0, 0);
-            line2RT.anchorMax = new Vector2(1, 0);
-            line2RT.pivot = new Vector2(0, 0);
-            line2RT.sizeDelta = new Vector2(0, 18);
-
-            LayoutElement line2Layout = line2Obj.AddComponent<LayoutElement>();
-            line2Layout.minHeight = 18;
-            line2Layout.preferredHeight = 18;
-
             // Line 3: Turn info
-            GameObject line3Obj = new GameObject("Line3", typeof(RectTransform));
+            GameObject line3Obj = new GameObject("Line3");
             line3Obj.transform.SetParent(entryObj.transform, false);
+
+            RectTransform line3RT = line3Obj.AddComponent<RectTransform>();
+            line3RT.anchorMin = new Vector2(0, 1);
+            line3RT.anchorMax = new Vector2(1, 1);
+            line3RT.pivot = new Vector2(0, 1);
+            line3RT.anchoredPosition = new Vector2(8, -47);
+            line3RT.sizeDelta = new Vector2(-16, 16);
 
             Text line3Text = line3Obj.AddComponent<Text>();
             line3Text.text = $"   Turn {entry.turnNumber}";
@@ -383,16 +383,6 @@ namespace PlunkAndPlunder.UI
             line3Text.fontSize = 11;
             line3Text.color = new Color(0.7f, 0.7f, 0.7f);
             line3Text.alignment = TextAnchor.MiddleLeft;
-
-            RectTransform line3RT = line3Obj.GetComponent<RectTransform>();
-            line3RT.anchorMin = new Vector2(0, 0);
-            line3RT.anchorMax = new Vector2(1, 0);
-            line3RT.pivot = new Vector2(0, 0);
-            line3RT.sizeDelta = new Vector2(0, 16);
-
-            LayoutElement line3Layout = line3Obj.AddComponent<LayoutElement>();
-            line3Layout.minHeight = 16;
-            line3Layout.preferredHeight = 16;
 
             entry.uiObject = entryObj;
             entryObjects[entryObj] = entry;

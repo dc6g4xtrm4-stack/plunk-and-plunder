@@ -337,7 +337,7 @@ namespace PlunkAndPlunder.UI
             actionButtonsSection.transform.SetParent(transform, false);
 
             RectTransform rt = actionButtonsSection.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0, 340); // Fixed height - fits all 5 buttons properly
+            rt.sizeDelta = new Vector2(0, 420); // Fixed height - fits all 6 buttons properly (6*50 + 5*10 + header + padding)
 
             // Layout
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
