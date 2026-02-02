@@ -204,6 +204,17 @@ namespace PlunkAndPlunder.Core
         }
     }
 
+    /// <summary>
+    /// Types of combat scenarios for visual distinction (Phase 3.1)
+    /// </summary>
+    public enum CombatType
+    {
+        Edge,              // Ships passing by each other (adjacent but different destinations)
+        DestinationCollision, // Ships moving to the same hex
+        Swap,              // Ships swapping positions
+        Stationary         // One or both ships not moving (default edge combat)
+    }
+
     [Serializable]
     public class CombatOccurredEvent : GameEvent
     {
@@ -213,14 +224,16 @@ namespace PlunkAndPlunder.Core
         public int damageToDefender;
         public bool attackerDestroyed;
         public bool defenderDestroyed;
+        public CombatType combatType; // Phase 3.1: Visual distinction for combat types
 
         // REMOVED: attackerRolls, defenderRolls - no more dice, deterministic combat only
 
         public CombatOccurredEvent(int turnNumber, string attackerId, string defenderId,
             int damageToAttacker, int damageToDefender,
-            bool attackerDestroyed, bool defenderDestroyed)
+            bool attackerDestroyed, bool defenderDestroyed,
+            CombatType combatType = CombatType.Edge)
             : base(turnNumber, GameEventType.CombatOccurred,
-                $"Combat: {attackerId} vs {defenderId} - Damage: {damageToAttacker} to attacker, {damageToDefender} to defender")
+                $"Combat ({combatType}): {attackerId} vs {defenderId} - Damage: {damageToAttacker} to attacker, {damageToDefender} to defender")
         {
             this.attackerId = attackerId;
             this.defenderId = defenderId;
@@ -228,6 +241,7 @@ namespace PlunkAndPlunder.Core
             this.damageToDefender = damageToDefender;
             this.attackerDestroyed = attackerDestroyed;
             this.defenderDestroyed = defenderDestroyed;
+            this.combatType = combatType;
         }
     }
 

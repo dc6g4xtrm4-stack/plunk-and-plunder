@@ -724,6 +724,47 @@ namespace PlunkAndPlunder.Resolution
         /// Resolve ONE ROUND of combat between two units (for multi-turn combat)
         /// Ships stay in their positions and fight one round per turn
         /// </summary>
+        /// <summary>
+        /// Determine the type of combat based on unit movement patterns (Phase 3.1)
+        /// </summary>
+        private CombatType DetermineCombatType(Unit unit1, Unit unit2)
+        {
+            // Check if units have queued paths (are moving)
+            bool unit1Moving = unit1.queuedPath != null && unit1.queuedPath.Count > 0;
+            bool unit2Moving = unit2.queuedPath != null && unit2.queuedPath.Count > 0;
+
+            // If neither moving, it's stationary combat
+            if (!unit1Moving && !unit2Moving)
+            {
+                return CombatType.Stationary;
+            }
+
+            // If only one moving, it's edge combat (moving past stationary)
+            if (!unit1Moving || !unit2Moving)
+            {
+                return CombatType.Edge;
+            }
+
+            // Both are moving - check for specific patterns
+            HexCoord unit1Destination = unit1.queuedPath[unit1.queuedPath.Count - 1];
+            HexCoord unit2Destination = unit2.queuedPath[unit2.queuedPath.Count - 1];
+
+            // Check for destination collision (both moving to same hex)
+            if (unit1Destination.Equals(unit2Destination))
+            {
+                return CombatType.DestinationCollision;
+            }
+
+            // Check for swap combat (unit1 going to unit2's position and vice versa)
+            if (unit1Destination.Equals(unit2.position) && unit2Destination.Equals(unit1.position))
+            {
+                return CombatType.Swap;
+            }
+
+            // Default to edge combat (passing by)
+            return CombatType.Edge;
+        }
+
         private List<GameEvent> ResolveOneRoundOfCombat(Unit unit1, Unit unit2, HexCoord location)
         {
             List<GameEvent> events = new List<GameEvent>();
@@ -765,6 +806,9 @@ namespace PlunkAndPlunder.Resolution
                 unit2.combatOpponentId = null;
             }
 
+            // Determine combat type based on movement context (Phase 3.1: Visual distinction)
+            CombatType combatType = DetermineCombatType(unit1, unit2);
+
             // Create combat event for this round
             events.Add(new CombatOccurredEvent(
                 turnNumber,
@@ -773,7 +817,8 @@ namespace PlunkAndPlunder.Resolution
                 result.damageToAttacker,
                 result.damageToDefender,
                 attackerDestroyed,
-                defenderDestroyed
+                defenderDestroyed,
+                combatType
             ));
 
             // Get ship display names for narrative logging
@@ -951,6 +996,9 @@ namespace PlunkAndPlunder.Resolution
                 bool attackerDestroyed = unit1.IsDead();
                 bool defenderDestroyed = unit2.IsDead();
 
+                // Determine combat type (for combat to the death, likely destination collision)
+                CombatType combatType = DetermineCombatType(unit1, unit2);
+
                 // Create combat event for this round
                 events.Add(new CombatOccurredEvent(
                     turnNumber,
@@ -959,7 +1007,8 @@ namespace PlunkAndPlunder.Resolution
                     result.damageToAttacker,
                     result.damageToDefender,
                     attackerDestroyed,
-                    defenderDestroyed
+                    defenderDestroyed,
+                    combatType
                 ));
 
                 // Log combat to file with narrative description

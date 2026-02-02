@@ -23,6 +23,12 @@ namespace PlunkAndPlunder.Rendering
         public Color playerVictoryColor = new Color(0.2f, 1f, 0.2f, 0.9f); // Green
         public Color mutualDestructionColor = new Color(1f, 0.8f, 0f, 0.9f); // Yellow
 
+        [Header("Combat Type Colors (Phase 3.1)")]
+        public Color edgeCombatColor = new Color(1f, 0.4f, 0.4f, 0.9f); // Light red - passing by
+        public Color destinationCollisionColor = new Color(1f, 0f, 0f, 1f); // Bright red - head-on collision
+        public Color swapCombatColor = new Color(1f, 0.3f, 1f, 0.9f); // Magenta - crossing paths
+        public Color stationaryCombatColor = new Color(0.8f, 0.2f, 0.2f, 0.8f); // Dark red - stationary target
+
         [Header("Damage Text")]
         public float damageTextSize = 1.5f;
         public Color damageTextColor = Color.white;
@@ -46,12 +52,12 @@ namespace PlunkAndPlunder.Rendering
         /// <summary>
         /// Show combat line between attacker and defender
         /// </summary>
-        public void ShowCombatLine(Vector3 attackerPos, Vector3 defenderPos, int damageDealt, CombatOutcome outcome = CombatOutcome.Standard)
+        public void ShowCombatLine(Vector3 attackerPos, Vector3 defenderPos, int damageDealt, CombatOutcome outcome = CombatOutcome.Standard, PlunkAndPlunder.Core.CombatType combatType = PlunkAndPlunder.Core.CombatType.Edge)
         {
-            StartCoroutine(AnimateCombatLine(attackerPos, defenderPos, damageDealt, outcome));
+            StartCoroutine(AnimateCombatLine(attackerPos, defenderPos, damageDealt, outcome, combatType));
         }
 
-        private IEnumerator AnimateCombatLine(Vector3 attackerPos, Vector3 defenderPos, int damage, CombatOutcome outcome)
+        private IEnumerator AnimateCombatLine(Vector3 attackerPos, Vector3 defenderPos, int damage, CombatOutcome outcome, PlunkAndPlunder.Core.CombatType combatType)
         {
             // Create line object
             GameObject lineObj = new GameObject("CombatLine");
@@ -77,8 +83,8 @@ namespace PlunkAndPlunder.Rendering
             lineRenderer.SetPosition(0, start);
             lineRenderer.SetPosition(1, end);
 
-            // Set color based on outcome
-            Color lineColor = GetColorForOutcome(outcome);
+            // Set color based on combat type and outcome (Phase 3.1)
+            Color lineColor = GetColorForCombatType(combatType, outcome);
             lineRenderer.startColor = lineColor;
             lineRenderer.endColor = lineColor;
 
@@ -227,6 +233,33 @@ namespace PlunkAndPlunder.Rendering
                     return mutualDestructionColor;
                 default:
                     return standardCombatColor;
+            }
+        }
+
+        /// <summary>
+        /// Get color based on combat type (Phase 3.1: Visual distinction)
+        /// Combat type color takes priority over outcome color for clarity
+        /// </summary>
+        private Color GetColorForCombatType(PlunkAndPlunder.Core.CombatType combatType, CombatOutcome outcome)
+        {
+            // Outcome colors override type colors for special cases
+            if (outcome == CombatOutcome.PlayerVictory)
+                return playerVictoryColor;
+            if (outcome == CombatOutcome.MutualDestruction)
+                return mutualDestructionColor;
+
+            // Use combat type colors for normal combat
+            switch (combatType)
+            {
+                case PlunkAndPlunder.Core.CombatType.DestinationCollision:
+                    return destinationCollisionColor;
+                case PlunkAndPlunder.Core.CombatType.Swap:
+                    return swapCombatColor;
+                case PlunkAndPlunder.Core.CombatType.Stationary:
+                    return stationaryCombatColor;
+                case PlunkAndPlunder.Core.CombatType.Edge:
+                default:
+                    return edgeCombatColor;
             }
         }
 

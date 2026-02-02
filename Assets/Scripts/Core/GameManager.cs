@@ -50,6 +50,9 @@ namespace PlunkAndPlunder.Core
         private Rendering.CombatIndicator combatIndicator; // Visual indicator for combat
         private Rendering.CombatConnectionRenderer combatConnectionRenderer; // NEW: Combat connection lines
         private Rendering.FloatingTextRenderer floatingTextRenderer; // NEW: Floating damage numbers and notifications
+        private List<CombatOccurredEvent> turnCombatEvents; // Track combat events for summary
+        private List<UnitDestroyedEvent> turnDestroyedEvents; // Track destroyed units for summary
+        private UI.CombatSummaryPanel combatSummaryPanel; // END: End-of-turn combat summary
 
         // Events
         public event Action<GamePhase> OnPhaseChanged;
@@ -77,6 +80,8 @@ namespace PlunkAndPlunder.Core
         private void InitializeGame()
         {
             state = new GameState();
+            turnCombatEvents = new List<CombatOccurredEvent>();
+            turnDestroyedEvents = new List<UnitDestroyedEvent>();
             config = new GameConfig();
 
             // Initialize file logging
@@ -154,6 +159,24 @@ namespace PlunkAndPlunder.Core
             ghostTrails.Initialize(turnAnimator, unitRenderer);
             Debug.Log("[GameManager] GhostTrailRenderer initialized - semi-transparent trails show ship movement history");
 
+            // Initialize combat range renderer (Phase 5.1: range indicators for edge combat)
+            PlunkAndPlunder.Rendering.CombatRangeRenderer rangeRenderer = gameObject.GetComponent<PlunkAndPlunder.Rendering.CombatRangeRenderer>();
+            if (rangeRenderer == null)
+            {
+                rangeRenderer = gameObject.AddComponent<PlunkAndPlunder.Rendering.CombatRangeRenderer>();
+            }
+            rangeRenderer.Initialize(turnAnimator, state.unitManager);
+            Debug.Log("[GameManager] CombatRangeRenderer initialized - shows range circles around ships with adjacent enemies");
+
+            // Initialize ongoing combat indicator (Task #9: persistent visual for multi-turn combat)
+            PlunkAndPlunder.Rendering.OngoingCombatIndicator combatIndicator = gameObject.GetComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+            if (combatIndicator == null)
+            {
+                combatIndicator = gameObject.AddComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+            }
+            combatIndicator.Initialize(turnAnimator, state.unitManager);
+            Debug.Log("[GameManager] OngoingCombatIndicator initialized - shows crossed swords for ships in multi-turn combat");
+
             // Initialize conflict resolution UI and combat results UI
             Canvas canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
@@ -190,6 +213,13 @@ namespace PlunkAndPlunder.Core
                 rightPanelHUDObj.transform.SetParent(canvas.transform, false);
                 rightPanelHUD = rightPanelHUDObj.AddComponent<RightPanelHUD>();
                 rightPanelHUD.Initialize(state);
+
+                // NEW: Initialize Combat Summary Panel
+                GameObject combatSummaryObj = new GameObject("CombatSummaryPanel");
+                combatSummaryObj.transform.SetParent(canvas.transform, false);
+                combatSummaryPanel = combatSummaryObj.AddComponent<UI.CombatSummaryPanel>();
+                combatSummaryPanel.Initialize();
+                Debug.Log("[GameManager] Combat summary panel initialized");
 
                 // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
                 // GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
@@ -478,6 +508,17 @@ namespace PlunkAndPlunder.Core
 
             // Final state update
             OnGameStateUpdated?.Invoke(state);
+
+            // Show combat summary if there were any combats this turn
+            if (combatSummaryPanel != null && turnCombatEvents.Count > 0)
+            {
+                combatSummaryPanel.ShowSummary(turnCombatEvents, turnDestroyedEvents);
+                Debug.Log($"[GameManager] Showing combat summary: {turnCombatEvents.Count} combats, {turnDestroyedEvents.Count} ships destroyed");
+            }
+
+            // Clear turn tracking for next turn
+            turnCombatEvents.Clear();
+            turnDestroyedEvents.Clear();
 
             // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD
@@ -779,6 +820,19 @@ namespace PlunkAndPlunder.Core
         {
             Debug.Log($"[GameManager] ☠️ COMBAT: {combatEvent.attackerId} vs {combatEvent.defenderId}");
 
+            // Track combat event for end-of-turn summary
+            turnCombatEvents.Add(combatEvent);
+
+            // Track destroyed units for summary
+            if (combatEvent.attackerDestroyed)
+            {
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.attackerId, "", new Map.HexCoord(0, 0)));
+            }
+            if (combatEvent.defenderDestroyed)
+            {
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.defenderId, "", new Map.HexCoord(0, 0)));
+            }
+
             // DON'T PAUSE ANIMATION - let ships continue moving!
             // turnAnimator.PauseAnimation(); // REMOVED
 
@@ -841,8 +895,23 @@ namespace PlunkAndPlunder.Core
                     attackerWorldPos,
                     defenderWorldPos,
                     combatEvent.damageToDefender,
-                    outcome
+                    outcome,
+                    combatEvent.combatType  // Phase 3.1: Pass combat type for visual distinction
                 );
+            }
+
+            // Flash health bars when units take damage (Task #10: Visual feedback)
+            PlunkAndPlunder.Rendering.UnitRenderer unitRenderer = FindFirstObjectByType<PlunkAndPlunder.Rendering.UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                if (combatEvent.damageToAttacker > 0)
+                {
+                    unitRenderer.FlashHealthBar(combatEvent.attackerId);
+                }
+                if (combatEvent.damageToDefender > 0)
+                {
+                    unitRenderer.FlashHealthBar(combatEvent.defenderId);
+                }
             }
 
             // Add to right panel combat log

@@ -36,6 +36,24 @@ namespace PlunkAndPlunder.Rendering
             unitsContainer.transform.SetParent(transform);
         }
 
+        /// <summary>
+        /// Flash health bar for a specific unit (Task #10: Visual feedback on damage)
+        /// </summary>
+        public void FlashHealthBar(string unitId)
+        {
+            if (healthBars.TryGetValue(unitId, out GameObject healthBarContainer))
+            {
+                if (healthBarContainer != null)
+                {
+                    HealthBarFlash flash = healthBarContainer.GetComponent<HealthBarFlash>();
+                    if (flash != null)
+                    {
+                        flash.FlashDamage();
+                    }
+                }
+            }
+        }
+
         public void RenderUnits(UnitManager unitManager)
         {
             // Verbose logging disabled for performance (called every animation frame)
@@ -750,31 +768,44 @@ namespace PlunkAndPlunder.Rendering
 
         private void CreateHealthBar(Unit unit, GameObject parent)
         {
-            // Create health bar container
+            // Create health bar container (Task #10: Enhanced visibility)
             GameObject healthBarContainer = new GameObject($"HealthBar_{unit.id}");
             healthBarContainer.transform.SetParent(parent.transform);
-            healthBarContainer.transform.localPosition = new Vector3(0, 0.8f, 0); // Above ship
+            healthBarContainer.transform.localPosition = new Vector3(0, 1.0f, 0); // Raised higher for visibility
 
-            // Background (red bar)
+            // Outline/border (black for contrast)
+            GameObject outline = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            outline.name = "HealthBarOutline";
+            outline.transform.SetParent(healthBarContainer.transform);
+            outline.transform.localPosition = Vector3.zero;
+            outline.transform.localScale = new Vector3(0.82f, 0.14f, 0.01f); // Slightly larger than bar
+            SetMaterialColor(outline, new Color(0.1f, 0.1f, 0.1f, 0.9f)); // Dark outline
+            Destroy(outline.GetComponent<Collider>()); // Remove collider
+
+            // Background (darker red bar)
             GameObject background = GameObject.CreatePrimitive(PrimitiveType.Cube);
             background.name = "HealthBarBG";
             background.transform.SetParent(healthBarContainer.transform);
-            background.transform.localPosition = Vector3.zero;
-            background.transform.localScale = new Vector3(0.6f, 0.08f, 0.02f);
-            SetMaterialColor(background, Color.red);
+            background.transform.localPosition = new Vector3(0, 0, -0.005f); // Slightly in front of outline
+            background.transform.localScale = new Vector3(0.8f, 0.12f, 0.015f); // Larger for better visibility
+            SetMaterialColor(background, new Color(0.6f, 0.1f, 0.1f, 0.9f)); // Dark red
             Destroy(background.GetComponent<Collider>()); // Remove collider
 
-            // Foreground (green bar)
+            // Foreground (vibrant health bar)
             GameObject foreground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             foreground.name = "HealthBarFG";
             foreground.transform.SetParent(healthBarContainer.transform);
-            foreground.transform.localPosition = Vector3.zero;
-            foreground.transform.localScale = new Vector3(0.6f, 0.09f, 0.01f);
-            SetMaterialColor(foreground, Color.green);
+            foreground.transform.localPosition = new Vector3(0, 0, -0.01f); // In front of background
+            foreground.transform.localScale = new Vector3(0.8f, 0.13f, 0.018f);
+            SetMaterialColor(foreground, new Color(0.2f, 1f, 0.2f)); // Bright green
             Destroy(foreground.GetComponent<Collider>()); // Remove collider
 
             // Make health bar always face camera
             BillboardHealthBar billboard = healthBarContainer.AddComponent<BillboardHealthBar>();
+
+            // Add damage flash component for visual feedback
+            HealthBarFlash flash = healthBarContainer.AddComponent<HealthBarFlash>();
+            flash.Initialize(foreground);
 
             healthBars[unit.id] = healthBarContainer;
 
@@ -806,22 +837,35 @@ namespace PlunkAndPlunder.Rendering
                     // Calculate health percentage
                     float healthPercent = (float)unit.health / unit.maxHealth;
 
-                    // Update foreground scale
+                    // Update foreground scale (adjusted for new size)
                     Vector3 scale = foreground.localScale;
-                    scale.x = 0.6f * healthPercent;
+                    scale.x = 0.8f * healthPercent;
                     foreground.localScale = scale;
 
                     // Update position to align left
                     Vector3 pos = foreground.localPosition;
-                    pos.x = -0.3f + (scale.x / 2f);
+                    pos.x = -0.4f + (scale.x / 2f);
                     foreground.localPosition = pos;
 
-                    // Update color based on health
-                    Color healthColor = Color.Lerp(Color.red, Color.green, healthPercent);
+                    // Update color based on health (Task #10: More vibrant colors)
+                    Color healthColor;
+                    if (healthPercent > 0.6f)
+                    {
+                        healthColor = Color.Lerp(new Color(1f, 1f, 0.2f), new Color(0.2f, 1f, 0.2f), (healthPercent - 0.6f) / 0.4f); // Yellow to bright green
+                    }
+                    else if (healthPercent > 0.3f)
+                    {
+                        healthColor = Color.Lerp(new Color(1f, 0.5f, 0f), new Color(1f, 1f, 0.2f), (healthPercent - 0.3f) / 0.3f); // Orange to yellow
+                    }
+                    else
+                    {
+                        healthColor = Color.Lerp(new Color(1f, 0f, 0f), new Color(1f, 0.5f, 0f), healthPercent / 0.3f); // Red to orange
+                    }
                     SetMaterialColor(foreground.gameObject, healthColor);
 
-                    // Hide health bar if at full health
-                    healthBarContainer.SetActive(unit.health < unit.maxHealth);
+                    // Show health bar if damaged OR in combat (Task #10: Always show during combat)
+                    bool showHealthBar = unit.health < unit.maxHealth || unit.isInCombat;
+                    healthBarContainer.SetActive(showHealthBar);
                 }
             }
             else
@@ -926,6 +970,67 @@ namespace PlunkAndPlunder.Rendering
             {
                 transform.LookAt(Camera.main.transform);
                 transform.Rotate(0, 180, 0); // Flip to face camera correctly
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flash effect for health bar when unit takes damage (Task #10)
+    /// </summary>
+    public class HealthBarFlash : MonoBehaviour
+    {
+        private GameObject foreground;
+        private Material foregroundMaterial;
+        private Color originalColor;
+        private bool isFlashing = false;
+        private float flashTimer = 0f;
+        private const float flashDuration = 0.3f;
+
+        public void Initialize(GameObject foregroundBar)
+        {
+            foreground = foregroundBar;
+            if (foreground != null)
+            {
+                Renderer renderer = foreground.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    foregroundMaterial = renderer.material;
+                    originalColor = foregroundMaterial.color;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Trigger damage flash effect
+        /// </summary>
+        public void FlashDamage()
+        {
+            if (!isFlashing)
+            {
+                isFlashing = true;
+                flashTimer = 0f;
+            }
+        }
+
+        private void Update()
+        {
+            if (isFlashing && foregroundMaterial != null)
+            {
+                flashTimer += Time.deltaTime;
+                float t = flashTimer / flashDuration;
+
+                if (t >= 1f)
+                {
+                    // Flash complete
+                    isFlashing = false;
+                    foregroundMaterial.color = originalColor;
+                }
+                else
+                {
+                    // Flash between white and original color
+                    Color flashColor = Color.Lerp(Color.white, originalColor, t);
+                    foregroundMaterial.color = flashColor;
+                }
             }
         }
     }
