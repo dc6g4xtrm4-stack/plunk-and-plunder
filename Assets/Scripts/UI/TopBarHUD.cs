@@ -154,7 +154,7 @@ namespace PlunkAndPlunder.UI
             Debug.Log("[TopBarHUD] Initialized at top-center");
         }
 
-        public void UpdateTurnInfo(int turn, GamePhase phase)
+        public void UpdateTurnInfo(int turn, GamePhase phase, string phaseOverride = null)
         {
             if (turnText != null)
             {
@@ -163,7 +163,17 @@ namespace PlunkAndPlunder.UI
 
             if (phaseText != null)
             {
-                phaseText.text = $"Phase: {phase}";
+                // Use override message if provided, otherwise show phase
+                if (!string.IsNullOrEmpty(phaseOverride))
+                {
+                    phaseText.text = phaseOverride;
+                    phaseText.color = new Color(1f, 0.8f, 0f); // Yellow warning color
+                }
+                else
+                {
+                    phaseText.text = $"Phase: {phase}";
+                    phaseText.color = HUDStyles.TextColor; // Reset to normal color
+                }
             }
         }
 

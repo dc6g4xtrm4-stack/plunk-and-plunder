@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using TMPro;
+using UnityEngine.UI;
 
 namespace PlunkAndPlunder.Rendering
 {
@@ -139,12 +139,12 @@ namespace PlunkAndPlunder.Rendering
                 // Fade damage text too
                 if (damageTextObj != null)
                 {
-                    TextMeshPro tmp = damageTextObj.GetComponent<TextMeshPro>();
-                    if (tmp != null)
+                    Text[] texts = damageTextObj.GetComponentsInChildren<Text>();
+                    foreach (Text txt in texts)
                     {
-                        Color textColor = tmp.color;
+                        Color textColor = txt.color;
                         textColor.a = 1f - t;
-                        tmp.color = textColor;
+                        txt.color = textColor;
                     }
                 }
 
@@ -162,17 +162,34 @@ namespace PlunkAndPlunder.Rendering
             GameObject textObj = new GameObject("DamageText");
             textObj.transform.position = position;
 
-            // Add TextMeshPro component
-            TextMeshPro tmp = textObj.AddComponent<TextMeshPro>();
-            tmp.text = $"-{damage}";
-            tmp.fontSize = damageTextSize;
-            tmp.color = damageTextColor;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.fontStyle = FontStyles.Bold;
+            // Add Canvas for world-space text
+            Canvas canvas = textObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+
+            RectTransform canvasRT = textObj.GetComponent<RectTransform>();
+            canvasRT.sizeDelta = new Vector2(2, 1);
+
+            // Add Text component
+            GameObject textChild = new GameObject("Text");
+            textChild.transform.SetParent(textObj.transform, false);
+
+            Text text = textChild.AddComponent<Text>();
+            text.text = $"-{damage}";
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 32;
+            text.color = damageTextColor;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.fontStyle = FontStyle.Bold;
+
+            RectTransform textRT = textChild.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.sizeDelta = Vector2.zero;
 
             // Add outline
-            tmp.outlineWidth = 0.2f;
-            tmp.outlineColor = Color.black;
+            Outline outline = textChild.AddComponent<Outline>();
+            outline.effectColor = Color.black;
+            outline.effectDistance = new Vector2(2, -2);
 
             // Billboard component to face camera
             Billboard billboard = textObj.AddComponent<Billboard>();

@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using TMPro;
+using UnityEngine.UI;
 
 namespace PlunkAndPlunder.Rendering
 {
@@ -80,20 +80,37 @@ namespace PlunkAndPlunder.Rendering
             );
             textObj.transform.position += randomOffset;
 
-            // Set up TextMeshPro
-            TextMeshPro tmp = textObj.GetComponent<TextMeshPro>();
-            if (tmp == null)
+            // Set up world-space text
+            Canvas canvas = textObj.GetComponent<Canvas>();
+            if (canvas == null)
             {
-                tmp = textObj.AddComponent<TextMeshPro>();
+                canvas = textObj.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+
+                RectTransform canvasRT = textObj.GetComponent<RectTransform>();
+                canvasRT.sizeDelta = new Vector2(2, 1);
             }
 
-            tmp.text = text;
-            tmp.fontSize = fontSize;
-            tmp.color = color;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.fontStyle = FontStyles.Bold;
-            tmp.outlineWidth = 0.25f;
-            tmp.outlineColor = Color.black;
+            // Add text child
+            GameObject textChild = new GameObject("Text");
+            textChild.transform.SetParent(textObj.transform, false);
+
+            Text txt = textChild.AddComponent<Text>();
+            txt.text = text;
+            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            txt.fontSize = 32;
+            txt.color = color;
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontStyle = FontStyle.Bold;
+
+            RectTransform textRT = textChild.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.sizeDelta = Vector2.zero;
+
+            Outline outline = textChild.AddComponent<Outline>();
+            outline.effectColor = Color.black;
+            outline.effectDistance = new Vector2(2, -2);
 
             // Billboard
             if (useBillboard)
@@ -151,7 +168,7 @@ namespace PlunkAndPlunder.Rendering
             Vector3 startPos = instance.startPosition;
             Vector3 endPos = startPos + Vector3.up * floatDistance;
 
-            TextMeshPro tmp = instance.gameObject.GetComponent<TextMeshPro>();
+            Text[] texts = instance.gameObject.GetComponentsInChildren<Text>();
 
             while (elapsed < duration && instance.gameObject != null)
             {
@@ -164,11 +181,14 @@ namespace PlunkAndPlunder.Rendering
 
                 // Fade using curve
                 float alpha = fadeCurve.Evaluate(t);
-                if (tmp != null)
+                foreach (Text txt in texts)
                 {
-                    Color color = tmp.color;
-                    color.a = alpha;
-                    tmp.color = color;
+                    if (txt != null)
+                    {
+                        Color color = txt.color;
+                        color.a = alpha;
+                        txt.color = color;
+                    }
                 }
 
                 yield return null;

@@ -41,7 +41,7 @@ namespace PlunkAndPlunder.Core
         private CollisionYieldUI collisionYieldUI;
         private EncounterUI encounterUI; // NEW: Encounter system UI
         private CombatResultsHUD combatResultsHUD; // NEW: Deterministic combat results display
-        private CombatEventLog combatEventLog; // NEW: Combat event log in corner
+        private RightPanelHUD rightPanelHUD; // NEW: Right panel with combat log
         // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
         // private PlayerStatsHUD playerStatsHUD;
 
@@ -162,11 +162,11 @@ namespace PlunkAndPlunder.Core
                 combatResultsHUD = combatResultsHUDObj.AddComponent<CombatResultsHUD>();
                 combatResultsHUD.Initialize();
 
-                // NEW: Initialize Combat Event Log
-                GameObject combatEventLogObj = new GameObject("CombatEventLog");
-                combatEventLogObj.transform.SetParent(canvas.transform, false);
-                combatEventLog = combatEventLogObj.AddComponent<CombatEventLog>();
-                combatEventLog.Initialize();
+                // NEW: Initialize Right Panel HUD with combat log
+                GameObject rightPanelHUDObj = new GameObject("RightPanelHUD");
+                rightPanelHUDObj.transform.SetParent(canvas.transform, false);
+                rightPanelHUD = rightPanelHUDObj.AddComponent<RightPanelHUD>();
+                rightPanelHUD.Initialize(state);
 
                 // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
                 // GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
@@ -822,10 +822,10 @@ namespace PlunkAndPlunder.Core
                 );
             }
 
-            // Add to combat event log
-            if (combatEventLog != null)
+            // Add to right panel combat log
+            if (rightPanelHUD != null)
             {
-                combatEventLog.AddCombatEntry(combatEvent, state);
+                rightPanelHUD.AddCombatEntry(combatEvent, state);
             }
 
             // Check if human player is involved in combat
