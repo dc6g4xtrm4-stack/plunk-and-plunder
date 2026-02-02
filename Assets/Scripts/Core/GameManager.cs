@@ -131,6 +131,19 @@ namespace PlunkAndPlunder.Core
             turnAnimator.OnStructureAttacked += HandleStructureAttacked;
             turnAnimator.OnStructureCaptured += HandleStructureCaptured;
 
+            // Initialize combat camera controller (Phase 2.1: auto-focus on combat)
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null)
+            {
+                PlunkAndPlunder.Rendering.CombatCameraController combatCamera = mainCamera.GetComponent<PlunkAndPlunder.Rendering.CombatCameraController>();
+                if (combatCamera == null)
+                {
+                    combatCamera = mainCamera.gameObject.AddComponent<PlunkAndPlunder.Rendering.CombatCameraController>();
+                }
+                combatCamera.Initialize(turnAnimator, state.unitManager);
+                Debug.Log("[GameManager] CombatCameraController initialized - auto-focus on combat enabled (press F to toggle)");
+            }
+
             // Initialize conflict resolution UI and combat results UI
             Canvas canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
