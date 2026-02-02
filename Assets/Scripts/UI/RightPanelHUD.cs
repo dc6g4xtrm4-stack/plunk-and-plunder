@@ -238,6 +238,30 @@ namespace PlunkAndPlunder.UI
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             scrollRect.content = contentRT;
+
+            // DEBUG: Add test text to verify rendering works
+            GameObject testTextObj = new GameObject("DEBUG_TestText");
+            testTextObj.transform.SetParent(contentContainer.transform, false);
+
+            RectTransform testRT = testTextObj.AddComponent<RectTransform>();
+            testRT.anchorMin = new Vector2(0, 1);
+            testRT.anchorMax = new Vector2(1, 1);
+            testRT.pivot = new Vector2(0, 1);
+            testRT.sizeDelta = new Vector2(-10, 50);
+
+            Text testText = testTextObj.AddComponent<Text>();
+            testText.text = "🔴 TEST - If you see this, text rendering works!";
+            testText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            testText.fontSize = 16;
+            testText.color = Color.red;
+            testText.alignment = TextAnchor.MiddleLeft;
+            testText.fontStyle = FontStyle.Bold;
+
+            LayoutElement testLayout = testTextObj.AddComponent<LayoutElement>();
+            testLayout.minHeight = 50;
+            testLayout.preferredHeight = 50;
+
+            Debug.Log("[RightPanelHUD] Added DEBUG test text to combat log content");
         }
 
         public void AddCombatEntry(CombatOccurredEvent combatEvent, GameState state)
