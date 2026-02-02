@@ -248,6 +248,9 @@ namespace PlunkAndPlunder.Core
             var combatEvents = turnResolver.ResolveCombatAfterMovement();
             events.AddRange(combatEvents);
 
+            // Validate fleets after collision resolution (auto-disband if ships separated)
+            State.fleetManager.ValidateFleets(State.unitManager);
+
             State.eventHistory.AddRange(events);
             OnEventsGenerated?.Invoke(events);
             OnStateChanged?.Invoke(State);
@@ -347,6 +350,9 @@ namespace PlunkAndPlunder.Core
             // Continue with adjacent combat resolution (existing logic)
             var adjacentCombatEvents = turnResolver.ResolveCombatAfterMovement();
             allEvents.AddRange(adjacentCombatEvents);
+
+            // Validate fleets after encounter resolution (auto-disband if ships separated)
+            State.fleetManager.ValidateFleets(State.unitManager);
 
             return allEvents;
         }
@@ -483,6 +489,9 @@ namespace PlunkAndPlunder.Core
 
             // Clear pending orders
             State.pendingOrders.Clear();
+
+            // Validate fleets after movement/combat (auto-disband if ships separated)
+            State.fleetManager.ValidateFleets(State.unitManager);
 
             return events;
         }

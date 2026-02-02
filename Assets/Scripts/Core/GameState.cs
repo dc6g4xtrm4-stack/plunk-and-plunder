@@ -50,6 +50,7 @@ namespace PlunkAndPlunder.Core
             playerManager = new PlayerManager();
             unitManager = new UnitManager();
             structureManager = new StructureManager();
+            fleetManager = new FleetManager();
             pendingOrders = new Dictionary<int, List<IOrder>>();
             eventHistory = new List<GameEvent>();
             pendingCollisions = new List<CollisionInfo>();

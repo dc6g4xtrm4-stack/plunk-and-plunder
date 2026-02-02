@@ -24,6 +24,7 @@ namespace PlunkAndPlunder.UI
         // Interaction state
         private Unit selectedUnit;
         private Structure selectedStructure;
+        private Fleet selectedFleet;
         private List<HexCoord> plannedPath;
         private List<IOrder> pendingPlayerOrders = new List<IOrder>();
         private HashSet<string> unitsWithOrders = new HashSet<string>(); // Track which units have pending orders
@@ -213,10 +214,25 @@ namespace PlunkAndPlunder.UI
                 {
                     HexCoord clickedCoord = HexCoord.FromWorldPosition(hit.point, 1f);
 
-                    // Check for units first
+                    // Check for fleets first (if multiple human-owned units at position)
                     List<Unit> unitsAtPos = GameManager.Instance.state.unitManager.GetUnitsAtPosition(clickedCoord);
-                    if (unitsAtPos.Count > 0)
+                    List<Unit> humanUnitsAtPos = unitsAtPos.FindAll(u => u.ownerId == 0);
+
+                    // Check if there's an existing fleet at this position
+                    Fleet fleetAtPos = null;
+                    if (humanUnitsAtPos.Count > 0)
                     {
+                        fleetAtPos = GameManager.Instance.state.fleetManager.GetFleetContainingUnit(humanUnitsAtPos[0].id);
+                    }
+
+                    if (fleetAtPos != null)
+                    {
+                        // Select the fleet
+                        SelectFleet(fleetAtPos);
+                    }
+                    else if (unitsAtPos.Count > 0)
+                    {
+                        // Select individual unit
                         SelectUnit(unitsAtPos[0]);
                     }
                     else
@@ -237,7 +253,7 @@ namespace PlunkAndPlunder.UI
             }
 
             // Right click: set destination or context menu
-            if (Input.GetMouseButtonDown(1) && selectedUnit != null)
+            if (Input.GetMouseButtonDown(1) && (selectedUnit != null || selectedFleet != null))
             {
                 // Don't handle game world clicks if mouse is over UI
                 if (UnityEngine.EventSystems.EventSystem.current != null &&
@@ -259,6 +275,7 @@ namespace PlunkAndPlunder.UI
         {
             selectedUnit = unit;
             selectedStructure = null;
+            selectedFleet = null;
 
             // Show selection indicator
             var unitRenderer = FindFirstObjectByType<UnitRenderer>();
@@ -285,16 +302,57 @@ namespace PlunkAndPlunder.UI
             // Update LeftPanelHUD
             if (leftPanelHUD != null)
             {
-                leftPanelHUD.UpdateSelection(selectedUnit, selectedStructure);
+                leftPanelHUD.UpdateSelection(selectedUnit, selectedStructure, selectedFleet);
             }
 
             Debug.Log($"[GameHUD] Unit selected: {unit.id}");
+        }
+
+        private void SelectFleet(Fleet fleet)
+        {
+            selectedFleet = fleet;
+            selectedUnit = null;
+            selectedStructure = null;
+
+            // Show selection indicators for all units in fleet
+            var unitRenderer = FindFirstObjectByType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                unitRenderer.HideSelectionIndicator();
+
+                // Show indicator for first unit (representative)
+                if (fleet.unitIds.Count > 0)
+                {
+                    unitRenderer.ShowSelectionIndicator(fleet.unitIds[0]);
+                }
+            }
+
+            // Update path visualization
+            if (pathVisualizer != null)
+            {
+                UpdatePathVisualizations();
+            }
+
+            // Hide build queue UI
+            if (buildQueueUI != null)
+            {
+                buildQueueUI.HideQueue();
+            }
+
+            // Update LeftPanelHUD
+            if (leftPanelHUD != null)
+            {
+                leftPanelHUD.UpdateSelection(null, null, selectedFleet);
+            }
+
+            Debug.Log($"[GameHUD] Fleet selected: {fleet.id} ({fleet.unitIds.Count} ships)");
         }
 
         private void SelectStructure(Structure structure)
         {
             selectedUnit = null;
             selectedStructure = structure;
+            selectedFleet = null;
             plannedPath = null;
 
             // Hide selection indicator when selecting a structure
@@ -323,7 +381,7 @@ namespace PlunkAndPlunder.UI
             // Update LeftPanelHUD
             if (leftPanelHUD != null)
             {
-                leftPanelHUD.UpdateSelection(selectedUnit, selectedStructure);
+                leftPanelHUD.UpdateSelection(selectedUnit, selectedStructure, null);
             }
 
             Debug.Log($"[GameHUD] Structure selected: {structure.id}");
@@ -333,6 +391,7 @@ namespace PlunkAndPlunder.UI
         {
             selectedUnit = null;
             selectedStructure = null;
+            selectedFleet = null;
             plannedPath = null;
 
             // Hide selection indicator
@@ -357,7 +416,7 @@ namespace PlunkAndPlunder.UI
             // Update LeftPanelHUD
             if (leftPanelHUD != null)
             {
-                leftPanelHUD.UpdateSelection(null, null);
+                leftPanelHUD.UpdateSelection(null, null, null);
             }
 
             Debug.Log("[GameHUD] Selection cleared");
@@ -365,7 +424,18 @@ namespace PlunkAndPlunder.UI
 
         private void SetUnitDestination(HexCoord destination)
         {
-            if (selectedUnit == null || GameManager.Instance == null)
+            if (GameManager.Instance == null)
+                return;
+
+            // Handle fleet movement
+            if (selectedFleet != null)
+            {
+                SetFleetDestination(destination);
+                return;
+            }
+
+            // Handle single unit movement
+            if (selectedUnit == null)
                 return;
 
             // Don't allow moving if not owned by human player
@@ -410,6 +480,68 @@ namespace PlunkAndPlunder.UI
                 UpdateSelectionIndicatorState(selectedUnit.id);
 
                 // Update path visualization - add/update this unit's path
+                if (pathVisualizer != null)
+                {
+                    UpdatePathVisualizations();
+                }
+
+                // Update HUD to enable Pass Turn button
+                UpdateHUD();
+            }
+        }
+
+        private void SetFleetDestination(HexCoord destination)
+        {
+            if (selectedFleet == null || GameManager.Instance == null)
+                return;
+
+            List<Unit> fleetUnits = selectedFleet.GetUnits(GameManager.Instance.state.unitManager);
+            if (fleetUnits.Count == 0)
+                return;
+
+            // Use first unit's position as fleet position for pathfinding
+            HexCoord fleetPosition = fleetUnits[0].position;
+
+            Pathfinding pathfinding = GameManager.Instance.GetPathfinding();
+            List<HexCoord> path = pathfinding.FindPath(fleetPosition, destination, 10);
+
+            if (path != null && path.Count > 1)
+            {
+                plannedPath = path;
+
+                // Issue the same move order to all units in the fleet
+                foreach (Unit unit in fleetUnits)
+                {
+                    // Clear combat flags if necessary
+                    if (unit.isInCombat)
+                    {
+                        unit.isInCombat = false;
+                        unit.combatOpponentId = null;
+                    }
+
+                    // Clear queued path
+                    unit.queuedPath = null;
+
+                    // Remove existing move order for this unit
+                    pendingPlayerOrders.RemoveAll(o => o is MoveOrder moveOrder && moveOrder.unitId == unit.id);
+
+                    // Add move order
+                    MoveOrder order = new MoveOrder(unit.id, 0, new List<HexCoord>(path));
+                    pendingPlayerOrders.Add(order);
+
+                    // Track that this unit has an order
+                    unitsWithOrders.Add(unit.id);
+
+                    // Store the path for this unit
+                    pendingMovePaths[unit.id] = new List<HexCoord>(path);
+
+                    // Update selection indicator
+                    UpdateSelectionIndicatorState(unit.id);
+                }
+
+                Debug.Log($"[GameHUD] Planned path for fleet {selectedFleet.id} ({fleetUnits.Count} ships): {path.Count} steps");
+
+                // Update path visualization
                 if (pathVisualizer != null)
                 {
                     UpdatePathVisualizations();
@@ -781,6 +913,76 @@ namespace PlunkAndPlunder.UI
 
             // Update HUD to enable Pass Turn button
             UpdateHUD();
+        }
+
+        public void OnCombineFleetClicked()
+        {
+            if (GameManager.Instance == null || selectedUnit == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            // Get all human-owned units at the selected unit's position
+            List<Unit> unitsAtPos = state.unitManager.GetUnitsAtPosition(selectedUnit.position);
+            List<Unit> humanUnitsAtPos = unitsAtPos.FindAll(u => u.ownerId == 0);
+
+            // Filter out units already in a fleet
+            List<Unit> fleetableUnits = state.fleetManager.GetFleetableUnitsAtPosition(selectedUnit.position, 0, state.unitManager);
+
+            if (fleetableUnits.Count < 2)
+            {
+                Debug.LogWarning("[GameHUD] Need at least 2 units at same position to form a fleet");
+                return;
+            }
+
+            // Create fleet with all human units at this position
+            List<string> unitIds = fleetableUnits.ConvertAll(u => u.id);
+            Fleet newFleet = state.fleetManager.CreateFleet(0, unitIds, state.unitManager);
+
+            if (newFleet != null)
+            {
+                Debug.Log($"[GameHUD] ✅ Created fleet {newFleet.id} with {unitIds.Count} ships");
+
+                // Select the new fleet
+                SelectFleet(newFleet);
+            }
+        }
+
+        public void OnDisbandFleetClicked()
+        {
+            if (GameManager.Instance == null || selectedFleet == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            Debug.Log($"[GameHUD] Disbanding fleet {selectedFleet.id}");
+
+            // Get position and first unit before disbanding
+            HexCoord? fleetPosition = selectedFleet.GetPosition(state.unitManager);
+            string firstUnitId = selectedFleet.unitIds.Count > 0 ? selectedFleet.unitIds[0] : null;
+
+            // Disband the fleet
+            state.fleetManager.DisbandFleet(selectedFleet.id);
+
+            // Select the first unit from the disbanded fleet
+            if (firstUnitId != null)
+            {
+                Unit unit = state.unitManager.GetUnit(firstUnitId);
+                if (unit != null)
+                {
+                    SelectUnit(unit);
+                }
+                else
+                {
+                    ClearSelection();
+                }
+            }
+            else
+            {
+                ClearSelection();
+            }
+
+            Debug.Log($"[GameHUD] ✅ Fleet disbanded");
         }
 
         private void HandlePhaseChanged(GamePhase phase)

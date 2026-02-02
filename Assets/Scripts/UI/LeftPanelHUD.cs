@@ -35,6 +35,7 @@ namespace PlunkAndPlunder.UI
         // Selection state
         private Unit selectedUnit;
         private Structure selectedStructure;
+        private Fleet selectedFleet;
 
         public void Initialize(GameState state)
         {
@@ -209,10 +210,11 @@ namespace PlunkAndPlunder.UI
             contentRT.sizeDelta = new Vector2(0, HUDStyles.UnitDetailsSectionHeight - 40);
         }
 
-        public void UpdateSelection(Unit unit, Structure structure)
+        public void UpdateSelection(Unit unit, Structure structure, Fleet fleet = null)
         {
             selectedUnit = unit;
             selectedStructure = structure;
+            selectedFleet = fleet;
 
             if (unitDetailsText == null) return;
 
@@ -221,7 +223,36 @@ namespace PlunkAndPlunder.UI
 
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
 
-            if (unit != null)
+            if (fleet != null)
+            {
+                // Display fleet info
+                List<Unit> fleetUnits = fleet.GetUnits(gameState.unitManager);
+                int shipCount = fleetUnits.Count;
+
+                sb.AppendLine($"<b>FLEET: {fleet.name}</b>");
+                sb.AppendLine($"Ships: {shipCount}");
+
+                if (fleetUnits.Count > 0)
+                {
+                    HexCoord? pos = fleet.GetPosition(gameState.unitManager);
+                    if (pos.HasValue)
+                    {
+                        sb.AppendLine($"Position: {pos.Value}");
+                    }
+
+                    sb.AppendLine();
+                    sb.AppendLine($"<b>Ships in Fleet:</b>");
+
+                    foreach (Unit fleetUnit in fleetUnits)
+                    {
+                        sb.AppendLine($"• {fleetUnit.name}: HP {fleetUnit.health}/{fleetUnit.maxHealth}");
+                    }
+                }
+
+                buildQueueSection.SetActive(false);
+                UpdateActionButtons();
+            }
+            else if (unit != null)
             {
                 Player owner = gameState.playerManager.GetPlayer(unit.ownerId);
                 sb.AppendLine($"<b>SHIP: {unit.name}</b>");
@@ -378,6 +409,8 @@ namespace PlunkAndPlunder.UI
             CreateSeparatorLine(actionButtonsSection.transform);
 
             // Create action buttons
+            CreateActionButton("CombineFleet", "Combine into Fleet", OnCombineFleet);
+            CreateActionButton("DisbandFleet", "Disband Fleet", OnDisbandFleet);
             CreateActionButton("DeployShipyard", "Deploy Shipyard (100g)", OnDeployShipyard);
             CreateActionButton("BuildShip", "Build Ship (50g)", OnBuildShip);
             CreateActionButton("UpgradeSails", "Upgrade Sails (60g)", OnUpgradeSails);
@@ -447,6 +480,20 @@ namespace PlunkAndPlunder.UI
             {
                 return;
             }
+
+            // Combine Fleet - only show if multiple human ships at same position (not in a fleet)
+            bool showCombineFleet = false;
+            if (selectedUnit != null && selectedUnit.ownerId == 0)
+            {
+                List<Unit> fleetableUnits = gameState.fleetManager.GetFleetableUnitsAtPosition(
+                    selectedUnit.position, 0, gameState.unitManager);
+                showCombineFleet = fleetableUnits.Count >= 2;
+            }
+            actionButtons["CombineFleet"].gameObject.SetActive(showCombineFleet);
+
+            // Disband Fleet - only show if fleet is selected
+            bool showDisbandFleet = selectedFleet != null;
+            actionButtons["DisbandFleet"].gameObject.SetActive(showDisbandFleet);
 
             // Deploy Shipyard - only show if ship is on empty harbor tile
             bool showDeployShipyard = false;
@@ -548,6 +595,30 @@ namespace PlunkAndPlunder.UI
         #endregion
 
         #region Action Button Handlers
+
+        private void OnCombineFleet()
+        {
+            Debug.Log("[LeftPanelHUD] Combine Fleet button clicked");
+
+            // Trigger combine via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnCombineFleetClicked", SendMessageOptions.DontRequireReceiver);
+            }
+        }
+
+        private void OnDisbandFleet()
+        {
+            Debug.Log("[LeftPanelHUD] Disband Fleet button clicked");
+
+            // Trigger disband via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnDisbandFleetClicked", SendMessageOptions.DontRequireReceiver);
+            }
+        }
 
         private void OnDeployShipyard()
         {
