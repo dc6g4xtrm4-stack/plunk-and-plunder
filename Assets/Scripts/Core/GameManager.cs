@@ -144,6 +144,16 @@ namespace PlunkAndPlunder.Core
                 Debug.Log("[GameManager] CombatCameraController initialized - auto-focus on combat enabled (press F to toggle)");
             }
 
+            // Initialize ghost trail renderer (Phase 1.1: show ship movement history)
+            PlunkAndPlunder.Rendering.GhostTrailRenderer ghostTrails = gameObject.GetComponent<PlunkAndPlunder.Rendering.GhostTrailRenderer>();
+            if (ghostTrails == null)
+            {
+                ghostTrails = gameObject.AddComponent<PlunkAndPlunder.Rendering.GhostTrailRenderer>();
+            }
+            PlunkAndPlunder.Rendering.UnitRenderer unitRenderer = FindFirstObjectByType<PlunkAndPlunder.Rendering.UnitRenderer>();
+            ghostTrails.Initialize(turnAnimator, unitRenderer);
+            Debug.Log("[GameManager] GhostTrailRenderer initialized - semi-transparent trails show ship movement history");
+
             // Initialize conflict resolution UI and combat results UI
             Canvas canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
