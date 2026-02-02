@@ -456,7 +456,28 @@ namespace PlunkAndPlunder.Resolution
 
         private IEnumerator AnimateCombat(CombatOccurredEvent combatEvent, GameState state)
         {
-            Debug.Log($"[TurnAnimator] Animating combat: {combatEvent.attackerId} vs {combatEvent.defenderId}");
+            Debug.Log($"[TurnAnimator] ⚔️ Animating combat: {combatEvent.attackerId} vs {combatEvent.defenderId}");
+
+            // Get the combatant units
+            Unit attacker = unitManager.GetUnit(combatEvent.attackerId);
+            Unit defender = unitManager.GetUnit(combatEvent.defenderId);
+
+            if (attacker != null && defender != null)
+            {
+                // PHASE 1.4: Pre-combat pause and highlight
+                Debug.Log($"[TurnAnimator] Pre-combat pause: highlighting combatants");
+
+                // Show "COMBAT!" floating text at midpoint between combatants
+                Vector3 midpoint = (attacker.position.ToWorldPosition() + defender.position.ToWorldPosition()) / 2f;
+                var floatingTextRenderer = FindFirstObjectByType<PlunkAndPlunder.Rendering.FloatingTextRenderer>();
+                if (floatingTextRenderer != null)
+                {
+                    floatingTextRenderer.SpawnText(midpoint + Vector3.up * 0.5f, "⚔️ COMBAT!", Color.red);
+                }
+
+                // Brief pause before showing combat visuals (build anticipation)
+                yield return new WaitForSeconds(0.3f);
+            }
 
             // Fire event to notify GameManager to show combat results UI
             OnCombatOccurred?.Invoke(combatEvent);
