@@ -48,6 +48,7 @@ namespace PlunkAndPlunder.Core
         // Combat tracking
         private Dictionary<string, int> combatRounds; // Track combat rounds per unit pair
         private Rendering.CombatIndicator combatIndicator; // Visual indicator for combat
+        private Rendering.OngoingCombatIndicator ongoingCombatIndicator; // Persistent indicator for multi-turn combat
         private Rendering.CombatConnectionRenderer combatConnectionRenderer; // NEW: Combat connection lines
         private Rendering.FloatingTextRenderer floatingTextRenderer; // NEW: Floating damage numbers and notifications
         private List<CombatOccurredEvent> turnCombatEvents; // Track combat events for summary
@@ -169,12 +170,12 @@ namespace PlunkAndPlunder.Core
             Debug.Log("[GameManager] CombatRangeRenderer initialized - shows range circles around ships with adjacent enemies");
 
             // Initialize ongoing combat indicator (Task #9: persistent visual for multi-turn combat)
-            PlunkAndPlunder.Rendering.OngoingCombatIndicator combatIndicator = gameObject.GetComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
-            if (combatIndicator == null)
+            ongoingCombatIndicator = gameObject.GetComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+            if (ongoingCombatIndicator == null)
             {
-                combatIndicator = gameObject.AddComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+                ongoingCombatIndicator = gameObject.AddComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
             }
-            combatIndicator.Initialize(turnAnimator, state.unitManager);
+            ongoingCombatIndicator.Initialize(turnAnimator, state.unitManager);
             Debug.Log("[GameManager] OngoingCombatIndicator initialized - shows crossed swords for ships in multi-turn combat");
 
             // Initialize conflict resolution UI and combat results UI
@@ -826,11 +827,15 @@ namespace PlunkAndPlunder.Core
             // Track destroyed units for summary
             if (combatEvent.attackerDestroyed)
             {
-                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.attackerId, "", new Map.HexCoord(0, 0)));
+                Unit attacker = state.unitManager.GetUnit(combatEvent.attackerId);
+                int ownerId = attacker != null ? attacker.ownerId : -1;
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.attackerId, ownerId, new Map.HexCoord(0, 0)));
             }
             if (combatEvent.defenderDestroyed)
             {
-                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.defenderId, "", new Map.HexCoord(0, 0)));
+                Unit defender = state.unitManager.GetUnit(combatEvent.defenderId);
+                int ownerId = defender != null ? defender.ownerId : -1;
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.defenderId, ownerId, new Map.HexCoord(0, 0)));
             }
 
             // DON'T PAUSE ANIMATION - let ships continue moving!

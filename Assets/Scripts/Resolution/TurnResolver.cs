@@ -71,8 +71,15 @@ namespace PlunkAndPlunder.Resolution
             }
 
             // Process pirate spawning at start of turn (PIRATE SYSTEM)
-            GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
-            events.AddRange(PlunkAndPlunder.AI.PirateSpawner.ProcessPirateSpawning(gameState, turnNumber));
+            // Create a temporary GameState reference for pirate spawning
+            GameState tempGameState = new GameState
+            {
+                grid = grid,
+                unitManager = unitManager,
+                playerManager = playerManager,
+                structureManager = structureManager
+            };
+            events.AddRange(PlunkAndPlunder.AI.PirateSpawner.ProcessPirateSpawning(tempGameState, turnNumber));
 
             // Sort orders by type priority and then by unit ID for determinism
             // Priority: UpgradeStructure > DeployShipyard > BuildShip > BuildGalleon > RepairShip > UpgradeShip > UpgradeSails > UpgradeCannons > UpgradeMaxLife > AttackShipyard > Move
@@ -863,9 +870,15 @@ namespace PlunkAndPlunder.Resolution
                 events.Add(new UnitDestroyedEvent(turnNumber, unit1.id, unit1.ownerId, location));
 
                 // Award gold if a pirate was killed
-                GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
+                GameState tempGameState = new GameState
+                {
+                    grid = grid,
+                    unitManager = unitManager,
+                    playerManager = playerManager,
+                    structureManager = structureManager
+                };
                 events.AddRange(PlunkAndPlunder.AI.PirateSpawner.AwardPirateKillGold(
-                    gameState, unit1, unit2, turnNumber));
+                    tempGameState, unit1, unit2, turnNumber));
 
                 if (!deferUnitRemoval)
                 {
@@ -884,9 +897,15 @@ namespace PlunkAndPlunder.Resolution
                 events.Add(new UnitDestroyedEvent(turnNumber, unit2.id, unit2.ownerId, location));
 
                 // Award gold if a pirate was killed
-                GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
+                GameState tempGameState = new GameState
+                {
+                    grid = grid,
+                    unitManager = unitManager,
+                    playerManager = playerManager,
+                    structureManager = structureManager
+                };
                 events.AddRange(PlunkAndPlunder.AI.PirateSpawner.AwardPirateKillGold(
-                    gameState, unit2, unit1, turnNumber));
+                    tempGameState, unit2, unit1, turnNumber));
 
                 if (!deferUnitRemoval)
                 {
@@ -2161,16 +2180,14 @@ namespace PlunkAndPlunder.Resolution
                 player.gold -= BuildingConfig.BUILD_GALLEON_COST;
 
                 // Create Galleon directly (legacy path)
-                string galleonId = System.Guid.NewGuid().ToString();
-                Unit galleon = new Unit(galleonId, order.playerId, navalFortress.position, UnitType.GALLEON);
-                unitManager.AddUnit(galleon);
+                Unit galleon = unitManager.CreateUnit(order.playerId, navalFortress.position, UnitType.GALLEON);
 
                 events.Add(new GameEvent(turnNumber, GameEventType.ShipBuilt,
-                    $"Player {order.playerId} built Galleon {galleonId} at {navalFortress.position}"));
+                    $"Player {order.playerId} built Galleon {galleon.id} at {navalFortress.position}"));
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] LEGACY: Player {order.playerId} built Galleon {galleonId} at {navalFortress.position}");
+                    Debug.Log($"[TurnResolver] LEGACY: Player {order.playerId} built Galleon {galleon.id} at {navalFortress.position}");
                 }
             }
 
