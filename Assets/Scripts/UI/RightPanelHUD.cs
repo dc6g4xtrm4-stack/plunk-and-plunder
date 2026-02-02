@@ -331,7 +331,7 @@ namespace PlunkAndPlunder.UI
             entryLayout.padding = new RectOffset(8, 8, 5, 5);
 
             // Main combat text line 1: "Attacker → Defender"
-            GameObject line1Obj = new GameObject("Line1");
+            GameObject line1Obj = new GameObject("Line1", typeof(RectTransform));
             line1Obj.transform.SetParent(entryObj.transform, false);
 
             Text line1Text = line1Obj.AddComponent<Text>();
@@ -343,10 +343,17 @@ namespace PlunkAndPlunder.UI
             line1Text.alignment = TextAnchor.MiddleLeft;
 
             RectTransform line1RT = line1Obj.GetComponent<RectTransform>();
+            line1RT.anchorMin = new Vector2(0, 0);
+            line1RT.anchorMax = new Vector2(1, 0);
+            line1RT.pivot = new Vector2(0, 0);
             line1RT.sizeDelta = new Vector2(0, 20);
 
+            LayoutElement line1Layout = line1Obj.AddComponent<LayoutElement>();
+            line1Layout.minHeight = 20;
+            line1Layout.preferredHeight = 20;
+
             // Line 2: Outcome
-            GameObject line2Obj = new GameObject("Line2");
+            GameObject line2Obj = new GameObject("Line2", typeof(RectTransform));
             line2Obj.transform.SetParent(entryObj.transform, false);
 
             Text line2Text = line2Obj.AddComponent<Text>();
@@ -357,10 +364,17 @@ namespace PlunkAndPlunder.UI
             line2Text.alignment = TextAnchor.MiddleLeft;
 
             RectTransform line2RT = line2Obj.GetComponent<RectTransform>();
+            line2RT.anchorMin = new Vector2(0, 0);
+            line2RT.anchorMax = new Vector2(1, 0);
+            line2RT.pivot = new Vector2(0, 0);
             line2RT.sizeDelta = new Vector2(0, 18);
 
+            LayoutElement line2Layout = line2Obj.AddComponent<LayoutElement>();
+            line2Layout.minHeight = 18;
+            line2Layout.preferredHeight = 18;
+
             // Line 3: Turn info
-            GameObject line3Obj = new GameObject("Line3");
+            GameObject line3Obj = new GameObject("Line3", typeof(RectTransform));
             line3Obj.transform.SetParent(entryObj.transform, false);
 
             Text line3Text = line3Obj.AddComponent<Text>();
@@ -371,10 +385,21 @@ namespace PlunkAndPlunder.UI
             line3Text.alignment = TextAnchor.MiddleLeft;
 
             RectTransform line3RT = line3Obj.GetComponent<RectTransform>();
+            line3RT.anchorMin = new Vector2(0, 0);
+            line3RT.anchorMax = new Vector2(1, 0);
+            line3RT.pivot = new Vector2(0, 0);
             line3RT.sizeDelta = new Vector2(0, 16);
+
+            LayoutElement line3Layout = line3Obj.AddComponent<LayoutElement>();
+            line3Layout.minHeight = 16;
+            line3Layout.preferredHeight = 16;
 
             entry.uiObject = entryObj;
             entryObjects[entryObj] = entry;
+
+            Debug.Log($"[RightPanelHUD] Entry UI created: active={entryObj.activeSelf}, parent={contentContainer.name}, childCount={contentContainer.transform.childCount}");
+            Debug.Log($"[RightPanelHUD] Entry position: {entryObj.transform.position}, localPos: {entryObj.transform.localPosition}");
+            Debug.Log($"[RightPanelHUD] Entry has {entryObj.transform.childCount} children (should be 3 text lines)");
         }
 
         private string GetCombatIcon(CombatLogEntry entry)
