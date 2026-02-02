@@ -1999,9 +1999,10 @@ namespace PlunkAndPlunder.Resolution
                     }
                 }
 
-                // DETERMINISTIC ATTACK: Deal 1 damage to shipyard
+                // DETERMINISTIC ATTACK: Deal cannon damage to shipyard
+                int cannonDamage = attackerShip.cannons;
                 int oldHealth = targetShipyard.health;
-                targetShipyard.TakeDamage(1);
+                targetShipyard.TakeDamage(cannonDamage);
                 int newHealth = targetShipyard.health;
 
                 // Create structure attacked event
@@ -2018,7 +2019,7 @@ namespace PlunkAndPlunder.Resolution
 
                 if (enableLogging)
                 {
-                    Debug.Log($"[TurnResolver] Player {order.playerId} ship {order.unitId} attacks shipyard {targetShipyard.id}: {oldHealth} HP → {newHealth} HP");
+                    Debug.Log($"[TurnResolver] Player {order.playerId} ship {order.unitId} ({cannonDamage} cannons) attacks shipyard {targetShipyard.id}: {oldHealth} HP → {newHealth} HP (dealt {oldHealth - newHealth} damage)");
                 }
 
                 // Check if shipyard is captured (health reached 0)
@@ -2048,7 +2049,7 @@ namespace PlunkAndPlunder.Resolution
 
                     // Log to game logger
                     GameLogger.LogPlayerAction(order.playerId,
-                        $"Ship {order.unitId} captured enemy shipyard at {order.targetPosition} after 3 attacks!");
+                        $"Ship {order.unitId} ({cannonDamage} cannons) dealt {oldHealth} damage and captured enemy shipyard at {order.targetPosition}!");
                 }
                 else
                 {
@@ -2060,7 +2061,7 @@ namespace PlunkAndPlunder.Resolution
 
                     // Log to game logger
                     GameLogger.LogPlayerAction(order.playerId,
-                        $"Ship {order.unitId} attacked enemy shipyard at {order.targetPosition} ({newHealth}/{targetShipyard.maxHealth} HP remaining)");
+                        $"Ship {order.unitId} ({cannonDamage} cannons) attacked enemy shipyard at {order.targetPosition} for {cannonDamage} damage ({newHealth}/{targetShipyard.maxHealth} HP remaining)");
                 }
             }
 

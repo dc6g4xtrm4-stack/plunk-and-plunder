@@ -361,6 +361,7 @@ namespace PlunkAndPlunder.UI
             CreateActionButton("UpgradeSails", "Upgrade Sails (60g)", OnUpgradeSails);
             CreateActionButton("UpgradeCannons", "Upgrade Cannons (80g)", OnUpgradeCannons);
             CreateActionButton("UpgradeMaxLife", "Upgrade Max Life (100g)", OnUpgradeMaxLife);
+            CreateActionButton("AttackShipyard", "Attack Shipyard", OnAttackShipyard);
 
             UpdateActionButtons();
         }
@@ -496,6 +497,30 @@ namespace PlunkAndPlunder.UI
             {
                 actionButtons["UpgradeMaxLife"].interactable = humanPlayer.gold >= BuildingConfig.UPGRADE_MAX_LIFE_COST;
             }
+
+            // Attack Shipyard - only show if ship is adjacent to enemy shipyard
+            bool showAttackShipyard = false;
+            if (selectedUnit != null && selectedUnit.ownerId == 0)
+            {
+                // Check adjacent tiles for enemy shipyards
+                HexCoord[] neighbors = selectedUnit.position.GetNeighbors();
+                foreach (HexCoord neighbor in neighbors)
+                {
+                    Structure structure = gameState.structureManager.GetStructureAtPosition(neighbor);
+                    if (structure != null &&
+                        structure.type == StructureType.SHIPYARD &&
+                        structure.ownerId != 0) // Enemy shipyard
+                    {
+                        showAttackShipyard = true;
+                        break;
+                    }
+                }
+            }
+            actionButtons["AttackShipyard"].gameObject.SetActive(showAttackShipyard);
+            if (showAttackShipyard)
+            {
+                actionButtons["AttackShipyard"].interactable = true; // Always enabled if shown
+            }
         }
 
         #endregion
@@ -569,6 +594,18 @@ namespace PlunkAndPlunder.UI
             if (gameHUD != null)
             {
                 gameHUD.SendMessage("OnUpgradeMaxLifeClicked", SendMessageOptions.DontRequireReceiver);
+            }
+        }
+
+        private void OnAttackShipyard()
+        {
+            Debug.Log("[LeftPanelHUD] Attack Shipyard button clicked");
+
+            // Trigger attack via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnAttackShipyardClicked", SendMessageOptions.DontRequireReceiver);
             }
         }
 

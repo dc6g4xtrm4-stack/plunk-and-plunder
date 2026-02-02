@@ -29,6 +29,13 @@ namespace PlunkAndPlunder.UI
         private HashSet<string> unitsWithOrders = new HashSet<string>(); // Track which units have pending orders
         private Dictionary<string, List<HexCoord>> pendingMovePaths = new Dictionary<string, List<HexCoord>>(); // Track paths per unit
 
+        // Pass turn cooldown to prevent rapid-fire clicking
+        private float lastPassTurnTime = 0f;
+        private const float PASS_TURN_COOLDOWN = 0.5f; // 0.5 second cooldown
+
+        // Track ship count to detect new ships spawning
+        private int lastHumanShipCount = 0;
+
         // Visualization components
         private PathVisualizer pathVisualizer;
 
@@ -142,7 +149,19 @@ namespace PlunkAndPlunder.UI
                 // Update TopBarHUD
                 if (topBarHUD != null)
                 {
-                    topBarHUD.UpdateTurnInfo(state.turnNumber, state.phase);
+                    // Check if human player has any ships
+                    int humanShipCount = state.unitManager.GetUnitsForPlayer(0).Count;
+                    bool hasNoShips = (humanShipCount == 0);
+
+                    // If no ships, modify phase display to show warning
+                    if (hasNoShips && state.phase == GamePhase.Planning)
+                    {
+                        topBarHUD.UpdateTurnInfo(state.turnNumber, state.phase, "⚠️ No Ships - Waiting for Construction");
+                    }
+                    else
+                    {
+                        topBarHUD.UpdateTurnInfo(state.turnNumber, state.phase);
+                    }
 
                     var humanPlayer = state.playerManager.GetPlayer(0);
                     if (humanPlayer != null)
@@ -151,11 +170,12 @@ namespace PlunkAndPlunder.UI
                     }
 
                     // Pass Turn button interactability and pulsing
-                    // Enable if there are pending orders OR if there's a path visualization that can be resolved
+                    // CHANGED: Always enable in Planning phase (allow passing with no orders)
+                    bool canSubmit = (state.phase == GamePhase.Planning);
+                    topBarHUD.SetPassTurnInteractable(canSubmit);
+
                     bool hasPendingOrders = pendingPlayerOrders.Count > 0;
                     bool hasPathVisualization = plannedPath != null && plannedPath.Count > 0;
-                    bool canSubmit = (state.phase == GamePhase.Planning && (hasPendingOrders || hasPathVisualization));
-                    topBarHUD.SetPassTurnInteractable(canSubmit);
                     Debug.Log($"[GameHUD] Pass Turn button: {(canSubmit ? "ENABLED (green)" : "DISABLED (grey)")} - phase={state.phase}, orders={pendingPlayerOrders.Count}, pathViz={hasPathVisualization}");
 
                     bool shouldPulse = (state.phase == GamePhase.Planning && pendingPlayerOrders.Count > 0 && AllHumanUnitsHaveOrders(state));
@@ -402,6 +422,14 @@ namespace PlunkAndPlunder.UI
 
         public void OnPassTurnClicked()
         {
+            // COOLDOWN: Prevent rapid-fire turn passing (fixes infinite loop when no ships)
+            float timeSinceLastPass = Time.time - lastPassTurnTime;
+            if (timeSinceLastPass < PASS_TURN_COOLDOWN)
+            {
+                Debug.LogWarning($"[GameHUD] ⏱️ Pass Turn on cooldown! Wait {PASS_TURN_COOLDOWN - timeSinceLastPass:F1}s");
+                return;
+            }
+
             Debug.Log("🔘 [GameHUD] ========== OnPassTurnClicked RECEIVED! ==========");
             Debug.Log($"[GameHUD] GameManager.Instance={(GameManager.Instance != null ? "exists" : "NULL")}");
             Debug.Log($"[GameHUD] pendingPlayerOrders.Count={pendingPlayerOrders.Count}");
@@ -412,15 +440,20 @@ namespace PlunkAndPlunder.UI
                 return;
             }
 
+            // CHANGED: Allow empty orders to pass turn (ships stay still, build queues progress)
             if (pendingPlayerOrders.Count == 0)
             {
-                Debug.LogWarning("[GameHUD] ⚠️ BLOCKED: No pending orders to submit!");
-                return;
+                Debug.Log("[GameHUD] ⚠️ No pending orders - passing turn with empty orders (ships stay still)");
+            }
+            else
+            {
+                Debug.Log($"[GameHUD] ✅ Calling GameManager.SubmitOrders(playerId=0, orderCount={pendingPlayerOrders.Count})...");
             }
 
-            Debug.Log($"[GameHUD] ✅ Calling GameManager.SubmitOrders(playerId=0, orderCount={pendingPlayerOrders.Count})...");
+            // Update cooldown timestamp
+            lastPassTurnTime = Time.time;
 
-            // Submit all pending orders
+            // Submit all pending orders (can be empty list)
             GameManager.Instance.SubmitOrders(0, pendingPlayerOrders);
 
             Debug.Log("[GameHUD] ✅ GameManager.SubmitOrders() CALLED!");
@@ -687,14 +720,78 @@ namespace PlunkAndPlunder.UI
             UpdateHUD();
         }
 
+        public void OnAttackShipyardClicked()
+        {
+            if (GameManager.Instance == null || selectedUnit == null)
+                return;
+
+            // Don't allow if not owned by human player
+            if (selectedUnit.ownerId != 0)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            // Find adjacent enemy shipyard
+            HexCoord[] neighbors = selectedUnit.position.GetNeighbors();
+            Structure targetShipyard = null;
+            HexCoord targetPosition = default;
+
+            foreach (HexCoord neighbor in neighbors)
+            {
+                Structure structure = state.structureManager.GetStructureAtPosition(neighbor);
+                if (structure != null &&
+                    structure.type == StructureType.SHIPYARD &&
+                    structure.ownerId != 0) // Enemy shipyard
+                {
+                    targetShipyard = structure;
+                    targetPosition = neighbor;
+                    break;
+                }
+            }
+
+            if (targetShipyard == null)
+            {
+                Debug.LogWarning("[GameHUD] No adjacent enemy shipyard found to attack");
+                return;
+            }
+
+            // Create path (ship position -> shipyard position)
+            List<HexCoord> path = new List<HexCoord> { selectedUnit.position, targetPosition };
+
+            // Create attack shipyard order
+            AttackShipyardOrder order = new AttackShipyardOrder(
+                selectedUnit.id,
+                0, // Player 0 (human)
+                targetShipyard.id,
+                targetPosition,
+                path
+            );
+            pendingPlayerOrders.Add(order);
+
+            // Track that this unit has an order
+            unitsWithOrders.Add(selectedUnit.id);
+
+            // Store path for visualization
+            pendingMovePaths[selectedUnit.id] = path;
+
+            Debug.Log($"[GameHUD] ⚔️ Attack shipyard order QUEUED: {selectedUnit.id} ({selectedUnit.cannons} cannons) -> shipyard {targetShipyard.id} at {targetPosition}! Pending orders: {pendingPlayerOrders.Count}");
+
+            // Update path visualizations
+            UpdatePathVisualizations();
+
+            // Update HUD to enable Pass Turn button
+            UpdateHUD();
+        }
+
         private void HandlePhaseChanged(GamePhase phase)
         {
             // Update HUD when phase changes
             UpdateHUD();
 
-            // Clear pending orders when new turn starts
+            // Handle phase-specific logic
             if (phase == GamePhase.Planning)
             {
+                // Clear pending orders when new turn starts
                 pendingPlayerOrders.Clear();
                 unitsWithOrders.Clear();
                 pendingMovePaths.Clear();
@@ -708,7 +805,78 @@ namespace PlunkAndPlunder.UI
 
                 // Restore remaining paths from previous turn's incomplete moves
                 RestoreRemainingPaths();
+
+                // CRITICAL: Check if new ships spawned for human player
+                CheckForNewShipsSpawned();
             }
+            else if (phase == GamePhase.Animating)
+            {
+                // CRITICAL: Restore path visualizations during animation
+                // This shows where ships are going during the animation phase
+                RestorePathsDuringAnimation();
+            }
+        }
+
+        /// <summary>
+        /// Restore path visualizations during animation phase to show where ships are moving
+        /// </summary>
+        private void RestorePathsDuringAnimation()
+        {
+            if (GameManager.Instance?.state == null || pathVisualizer == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+
+            // Get all units that are currently moving (have queued paths from this turn)
+            List<Unit> allUnits = state.unitManager.GetAllUnits();
+            int pathsRestored = 0;
+
+            foreach (Unit unit in allUnits)
+            {
+                // Check if unit has a queued path (this was set during order submission)
+                if (unit.queuedPath != null && unit.queuedPath.Count > 1)
+                {
+                    // Show the path during animation
+                    int movementCapacity = unit.GetMovementCapacity();
+                    pathVisualizer.AddPath(unit.id, unit.queuedPath, isPrimary: false, movementCapacity);
+                    pathsRestored++;
+                    Debug.Log($"[GameHUD] Restored path during animation for unit {unit.id}: {unit.queuedPath.Count} waypoints");
+                }
+            }
+
+            if (pathsRestored > 0)
+            {
+                Debug.Log($"[GameHUD] ===== RESTORED {pathsRestored} PATHS DURING ANIMATION =====");
+            }
+        }
+
+        /// <summary>
+        /// Check if new ships spawned for the human player this turn.
+        /// If yes, show notification and reset cooldown to give player time to react.
+        /// </summary>
+        private void CheckForNewShipsSpawned()
+        {
+            if (GameManager.Instance?.state == null)
+                return;
+
+            GameState state = GameManager.Instance.state;
+            int currentHumanShipCount = state.unitManager.GetUnitsForPlayer(0).Count;
+
+            // If ship count increased, new ship(s) spawned!
+            if (currentHumanShipCount > lastHumanShipCount)
+            {
+                int newShips = currentHumanShipCount - lastHumanShipCount;
+                Debug.Log($"[GameHUD] 🚢 NEW SHIP(S) SPAWNED! Count: {lastHumanShipCount} → {currentHumanShipCount} (+{newShips})");
+
+                // Reset cooldown to give player time to notice and select new ship
+                lastPassTurnTime = 0f;
+
+                // TODO: Show visual notification (toast message or highlight)
+                // For now, just log to console and reset cooldown
+            }
+
+            // Update tracked count
+            lastHumanShipCount = currentHumanShipCount;
         }
 
         private void HandleTurnResolved(List<GameEvent> events)

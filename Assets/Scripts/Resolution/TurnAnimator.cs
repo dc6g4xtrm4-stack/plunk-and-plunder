@@ -25,6 +25,8 @@ namespace PlunkAndPlunder.Resolution
         public event Action OnAnimationComplete; // Fired when all animations done
         public event Action<ConflictDetectedEvent> OnConflictDetected; // Fired when conflict is detected during animation
         public event Action<CombatOccurredEvent> OnCombatOccurred; // Fired when combat occurs
+        public event Action<StructureAttackedEvent> OnStructureAttacked; // Fired when structure is attacked
+        public event Action<StructureCapturedEvent> OnStructureCaptured; // Fired when structure is captured
 
         private void Awake()
         {
@@ -138,6 +140,14 @@ namespace PlunkAndPlunder.Resolution
 
                     case CombatOccurredEvent combatEvent:
                         yield return AnimateCombat(combatEvent, state);
+                        break;
+
+                    case StructureAttackedEvent structureAttackedEvent:
+                        yield return AnimateStructureAttack(structureAttackedEvent, state);
+                        break;
+
+                    case StructureCapturedEvent structureCapturedEvent:
+                        yield return AnimateStructureCapture(structureCapturedEvent, state);
                         break;
 
                     case ConflictDetectedEvent conflictEvent:
@@ -461,6 +471,34 @@ namespace PlunkAndPlunder.Resolution
             }
 
             // If units were destroyed, they should be removed by subsequent UnitDestroyedEvent
+        }
+
+        private IEnumerator AnimateStructureAttack(StructureAttackedEvent structureEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating structure attack: Ship {structureEvent.attackerUnitId} attacked shipyard at {structureEvent.position}");
+
+            // Fire event to notify GameManager to show combat indicator
+            OnStructureAttacked?.Invoke(structureEvent);
+
+            // Trigger visual update
+            OnAnimationStep?.Invoke(state);
+
+            // Wait for combat pause delay
+            yield return new WaitForSeconds(combatPauseDelay);
+        }
+
+        private IEnumerator AnimateStructureCapture(StructureCapturedEvent captureEvent, GameState state)
+        {
+            Debug.Log($"[TurnAnimator] Animating structure capture: Player {captureEvent.newOwnerId} captured shipyard at {captureEvent.position}");
+
+            // Fire event to notify GameManager to show combat indicator
+            OnStructureCaptured?.Invoke(captureEvent);
+
+            // Trigger visual update
+            OnAnimationStep?.Invoke(state);
+
+            // Wait for slightly longer (capture is more significant)
+            yield return new WaitForSeconds(combatPauseDelay * 2f);
         }
 
         private IEnumerator AnimateConflictDetected(ConflictDetectedEvent conflictEvent, GameState state)

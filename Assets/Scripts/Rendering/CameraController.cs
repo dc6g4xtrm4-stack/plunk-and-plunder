@@ -13,19 +13,21 @@ namespace PlunkAndPlunder.Rendering
         public float edgePanBorder = 50f;
 
         [Header("Zoom")]
-        public float zoomSpeed = 5f;
+        public float zoomSpeed = 20f; // Increased from 5f for faster zoom
         public float minZoom = 5f;
         public float maxZoom = 50f;
 
         [Header("Drag")]
         public bool enableMiddleMouseDrag = true;
+        public bool enableLeftMouseDrag = true;
 
         [Header("Smooth Movement")]
         public float smoothMoveSpeed = 5f;
 
         private Camera cam;
         private Vector3 dragOrigin;
-        private bool isDragging = false;
+        private bool isDraggingMiddle = false;
+        private bool isDraggingLeft = false;
         private Vector3 targetPosition;
         private bool isMovingToTarget = false;
 
@@ -105,10 +107,10 @@ namespace PlunkAndPlunder.Rendering
                 if (Input.GetMouseButtonDown(2))
                 {
                     dragOrigin = cam.ScreenToViewportPoint(Input.mousePosition);
-                    isDragging = true;
+                    isDraggingMiddle = true;
                 }
 
-                if (Input.GetMouseButton(2) && isDragging)
+                if (Input.GetMouseButton(2) && isDraggingMiddle)
                 {
                     Vector3 difference = dragOrigin - cam.ScreenToViewportPoint(Input.mousePosition);
                     move += new Vector3(difference.x * panSpeed, 0f, difference.y * panSpeed);
@@ -117,7 +119,29 @@ namespace PlunkAndPlunder.Rendering
 
                 if (Input.GetMouseButtonUp(2))
                 {
-                    isDragging = false;
+                    isDraggingMiddle = false;
+                }
+            }
+
+            // Left mouse drag (click and drag to pan)
+            if (enableLeftMouseDrag)
+            {
+                if (Input.GetMouseButtonDown(0))
+                {
+                    dragOrigin = cam.ScreenToViewportPoint(Input.mousePosition);
+                    isDraggingLeft = true;
+                }
+
+                if (Input.GetMouseButton(0) && isDraggingLeft)
+                {
+                    Vector3 difference = dragOrigin - cam.ScreenToViewportPoint(Input.mousePosition);
+                    move += new Vector3(difference.x * panSpeed, 0f, difference.y * panSpeed);
+                    dragOrigin = cam.ScreenToViewportPoint(Input.mousePosition);
+                }
+
+                if (Input.GetMouseButtonUp(0))
+                {
+                    isDraggingLeft = false;
                 }
             }
 

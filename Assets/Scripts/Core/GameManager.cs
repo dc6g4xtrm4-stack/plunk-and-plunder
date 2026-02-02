@@ -46,6 +46,7 @@ namespace PlunkAndPlunder.Core
 
         // Combat tracking
         private Dictionary<string, int> combatRounds; // Track combat rounds per unit pair
+        private Rendering.CombatIndicator combatIndicator; // Visual indicator for combat
 
         // Events
         public event Action<GamePhase> OnPhaseChanged;
@@ -124,6 +125,8 @@ namespace PlunkAndPlunder.Core
             turnAnimator.OnAnimationComplete += HandleAnimationComplete;
             turnAnimator.OnConflictDetected += HandleConflictDetected;
             turnAnimator.OnCombatOccurred += HandleCombatOccurred;
+            turnAnimator.OnStructureAttacked += HandleStructureAttacked;
+            turnAnimator.OnStructureCaptured += HandleStructureCaptured;
 
             // Initialize conflict resolution UI and combat results UI
             Canvas canvas = FindFirstObjectByType<Canvas>();
@@ -162,6 +165,12 @@ namespace PlunkAndPlunder.Core
                 // playerStatsHUD = playerStatsHUDObj.AddComponent<PlayerStatsHUD>();
                 // playerStatsHUD.Initialize();
             }
+
+            // Initialize combat indicator
+            GameObject combatIndicatorObj = new GameObject("CombatIndicator");
+            combatIndicator = combatIndicatorObj.AddComponent<Rendering.CombatIndicator>();
+            combatIndicator.Initialize();
+            Debug.Log("[GameManager] Combat indicator initialized");
 
             // Initialization (map, structures, units) already handled by engine.InitializeGame()
 
@@ -229,6 +238,9 @@ namespace PlunkAndPlunder.Core
 
             Debug.Log($"[GameManager] Turn {state.turnNumber} - Planning phase started");
             GameLogger.LogGameState(state);
+
+            // Flash player units at start of each turn
+            FlashPlayerUnits();
 
             // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD after awarding gold
@@ -723,10 +735,10 @@ namespace PlunkAndPlunder.Core
 
         private void HandleCombatOccurred(CombatOccurredEvent combatEvent)
         {
-            Debug.Log($"[GameManager] Combat occurred: {combatEvent.attackerId} vs {combatEvent.defenderId}");
+            Debug.Log($"[GameManager] ☠️ COMBAT: {combatEvent.attackerId} vs {combatEvent.defenderId}");
 
-            // Pause animation
-            turnAnimator.PauseAnimation();
+            // DON'T PAUSE ANIMATION - let ships continue moving!
+            // turnAnimator.PauseAnimation(); // REMOVED
 
             // Get units involved (may be destroyed by combat, so check)
             Unit attacker = state.unitManager.GetUnit(combatEvent.attackerId);
@@ -748,48 +760,32 @@ namespace PlunkAndPlunder.Core
             if (attacker == null || defender == null)
             {
                 Debug.LogWarning($"[GameManager] Could not find units for combat: {combatEvent.attackerId} or {combatEvent.defenderId}");
-
-                // If units are destroyed, clear the combat round tracking
                 combatRounds.Remove(combatKey);
-
-                turnAnimator.ResumeAnimation();
+                // DON'T resume - we never paused!
                 return;
             }
+
+            // SHOW SKULL AND CROSSBONES INDICATOR at combat location
+            // Combat occurs at the defender's position
+            HexCoord combatPosition = defender.position;
+            ShowCombatIndicator(combatPosition);
 
             // Check if human player is involved in combat
             bool humanInvolved = (attacker != null && attacker.ownerId == 0) || (defender != null && defender.ownerId == 0);
 
-            // If auto-resolving OR no human involved, skip UI and auto-continue
-            if (isAutoResolving || !humanInvolved)
+            // Show combat results HUD (non-blocking overlay) for human combats
+            if (humanInvolved && !isAutoResolving)
             {
-                if (!humanInvolved)
-                {
-                    Debug.Log($"[GameManager] AI vs AI combat: {attacker?.id ?? "?"} (P{attacker?.ownerId}) vs {defender?.id ?? "?"} (P{defender?.ownerId}) - skipping UI");
-                }
-                else
-                {
-                    Debug.Log("[GameManager] Auto-resolve: skipping combat UI, auto-continuing");
-                }
-                StartCoroutine(AutoContinueCombat());
-            }
-            else
-            {
-                // Show combat results HUD (human player involved)
                 if (combatResultsHUD != null)
                 {
                     combatResultsHUD.ShowCombatResult(combatEvent, state);
-
-                    // Increment round number for next combat between these units
                     combatRounds[combatKey] = roundNumber + 1;
-
-                    // Auto-resume after HUD auto-hides (3 seconds)
-                    StartCoroutine(AutoResumeCombatAfterDelay(3.1f));
+                    // HUD auto-hides after 3 seconds (no animation pause!)
                 }
-                else if (combatResultsUI != null)
-                {
-                    // OLD: Fallback to old UI (will be removed)
-                    combatResultsUI.ShowCombatResults(combatEvent, attacker, defender, OnCombatResultsContinue, state.playerManager);
-                }
+            }
+            else
+            {
+                Debug.Log($"[GameManager] AI vs AI combat or auto-resolve - showing indicator only");
             }
 
             // Award salvage gold for destroyed ships (50% of build cost = 25g for basic ships)
@@ -814,27 +810,61 @@ namespace PlunkAndPlunder.Core
             }
         }
 
+        /// <summary>
+        /// Show visual combat indicator (RED SKULL AND CROSSBONES) at combat location
+        /// </summary>
+        private void ShowCombatIndicator(HexCoord position)
+        {
+            if (combatIndicator != null)
+            {
+                combatIndicator.ShowCombatAt(position, hexSize: 1f, duration: 2.0f);
+                Debug.Log($"[GameManager] ☠️ Combat indicator shown at {position}");
+            }
+        }
+
+        /// <summary>
+        /// Handle structure attacked event - show combat indicator at structure location
+        /// </summary>
+        private void HandleStructureAttacked(StructureAttackedEvent structureEvent)
+        {
+            Debug.Log($"[GameManager] ⚔️ STRUCTURE ATTACK: Ship {structureEvent.attackerUnitId} attacked shipyard at {structureEvent.position} ({structureEvent.oldHealth} → {structureEvent.newHealth} HP)");
+
+            // Show combat indicator at structure location
+            ShowCombatIndicator(structureEvent.position);
+        }
+
+        /// <summary>
+        /// Handle structure captured event - show combat indicator with emphasis
+        /// </summary>
+        private void HandleStructureCaptured(StructureCapturedEvent captureEvent)
+        {
+            Debug.Log($"[GameManager] 🏴 STRUCTURE CAPTURED: Player {captureEvent.newOwnerId} captured shipyard from Player {captureEvent.previousOwnerId} at {captureEvent.position}");
+
+            // Show combat indicator for capture (reuse ShowCombatIndicator)
+            ShowCombatIndicator(captureEvent.position);
+        }
+
+        // NOTE: These methods are now UNUSED since we don't pause for combat
+        // Keeping them commented for reference in case we need pause functionality later
+
+        /*
         private IEnumerator AutoContinueCombat()
         {
-            // Wait briefly to simulate combat happening
             yield return new WaitForSeconds(0.1f);
-            Debug.Log("[GameManager] Auto-resolve: continuing after combat");
             turnAnimator.ResumeAnimation();
         }
 
         private IEnumerator AutoResumeCombatAfterDelay(float delay)
         {
-            // Wait for CombatResultsHUD to auto-hide
             yield return new WaitForSeconds(delay);
-            Debug.Log("[GameManager] CombatResultsHUD auto-hidden, resuming animation");
             turnAnimator.ResumeAnimation();
         }
 
         private void OnCombatResultsContinue()
         {
-            Debug.Log("[GameManager] Player acknowledged combat results, resuming animation");
             turnAnimator.ResumeAnimation();
         }
+        */
 
         public Pathfinding GetPathfinding() => engine?.GetPathfinding();
 
@@ -883,6 +913,30 @@ namespace PlunkAndPlunder.Core
             {
                 Debug.LogError($"[GameManager] Auto-resolve failed: {ex.Message}\n{ex.StackTrace}");
                 isAutoResolving = false;
+            }
+        }
+
+        /// <summary>
+        /// Flash all player units at the start of a turn
+        /// </summary>
+        private void FlashPlayerUnits()
+        {
+            Player humanPlayer = state.playerManager.GetPlayer(0);
+            if (humanPlayer == null) return;
+
+            UnitRenderer unitRenderer = FindFirstObjectByType<UnitRenderer>();
+            if (unitRenderer != null)
+            {
+                int flashedCount = 0;
+                foreach (Unit unit in state.unitManager.GetAllUnits())
+                {
+                    if (unit.ownerId == humanPlayer.id)
+                    {
+                        unitRenderer.AddTemporaryHighlight(unit.id, duration: 3f);
+                        flashedCount++;
+                    }
+                }
+                Debug.Log($"[GameManager] 💡 Flashed {flashedCount} player units at turn start");
             }
         }
 
