@@ -12,6 +12,7 @@ namespace PlunkAndPlunder.Structures
         public int ownerId; // -1 for neutral
         public HexCoord position;
         public StructureType type;
+        public int tier; // Structure tier/level (1 = basic, 2 = upgraded, 3 = advanced)
         public int health;
         public int maxHealth;
 
@@ -22,23 +23,37 @@ namespace PlunkAndPlunder.Structures
         [System.Obsolete("Use ConstructionManager.GetShipyardQueue() instead of accessing buildQueue directly")]
         public List<BuildQueueItem> buildQueue = new List<BuildQueueItem>();
 
-        public Structure(string id, int ownerId, HexCoord position, StructureType type)
+        public Structure(string id, int ownerId, HexCoord position, StructureType type, int tier = 1)
         {
             this.id = id;
             this.ownerId = ownerId;
             this.position = position;
             this.type = type;
+            this.tier = tier;
 
-            // Initialize health based on structure type
-            if (type == StructureType.SHIPYARD)
+            // Initialize health based on structure type and tier
+            switch (type)
             {
-                this.health = 3;      // Shipyards start with 3 HP
-                this.maxHealth = 3;   // Takes 3 attacks to capture
-            }
-            else
-            {
-                this.health = 1;      // Other structures (if added later)
-                this.maxHealth = 1;
+                case StructureType.SHIPYARD:
+                    this.health = 3;
+                    this.maxHealth = 3;
+                    break;
+                case StructureType.NAVAL_YARD:
+                    this.health = 5;      // Naval Yards are tougher
+                    this.maxHealth = 5;
+                    break;
+                case StructureType.NAVAL_FORTRESS:
+                    this.health = 10;     // Fortresses are very tough
+                    this.maxHealth = 10;
+                    break;
+                case StructureType.PIRATE_COVE:
+                    this.health = 5;      // Pirate Coves are tough
+                    this.maxHealth = 5;
+                    break;
+                default:
+                    this.health = 1;
+                    this.maxHealth = 1;
+                    break;
             }
         }
 
@@ -61,6 +76,9 @@ namespace PlunkAndPlunder.Structures
 
     public enum StructureType
     {
-        SHIPYARD
+        SHIPYARD,
+        NAVAL_YARD,        // Upgraded Shipyard (Tier 2)
+        NAVAL_FORTRESS,    // Advanced Shipyard (Tier 3) - Can build Galleons
+        PIRATE_COVE        // Pirate structure - Spawns pirate ships
     }
 }

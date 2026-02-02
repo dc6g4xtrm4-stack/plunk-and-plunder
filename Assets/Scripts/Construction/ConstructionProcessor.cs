@@ -68,11 +68,18 @@ namespace PlunkAndPlunder.Construction
                 return events;
             }
 
-            // Spawn ship
+            // Determine unit type based on job item type
+            UnitType unitType = UnitType.SHIP; // Default to regular ship
+            if (job.itemType == "Galleon")
+            {
+                unitType = UnitType.GALLEON;
+            }
+
+            // Spawn ship or galleon
             Unit newShip = gameState.unitManager.CreateUnit(
                 job.playerId,
                 shipyard.position,
-                UnitType.SHIP
+                unitType
             );
 
             // Update job status

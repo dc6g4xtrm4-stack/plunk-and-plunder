@@ -412,7 +412,9 @@ namespace PlunkAndPlunder.UI
             CreateActionButton("CombineFleet", "Combine into Fleet", OnCombineFleet);
             CreateActionButton("DisbandFleet", "Disband Fleet", OnDisbandFleet);
             CreateActionButton("DeployShipyard", "Deploy Shipyard (100g)", OnDeployShipyard);
+            CreateActionButton("UpgradeStructure", "Upgrade Structure", OnUpgradeStructure); // Dynamic label
             CreateActionButton("BuildShip", "Build Ship (50g)", OnBuildShip);
+            CreateActionButton("BuildGalleon", "Build Galleon (200g)", OnBuildGalleon);
             CreateActionButton("UpgradeSails", "Upgrade Sails (60g)", OnUpgradeSails);
             CreateActionButton("UpgradeCannons", "Upgrade Cannons (80g)", OnUpgradeCannons);
             CreateActionButton("UpgradeMaxLife", "Upgrade Max Life (100g)", OnUpgradeMaxLife);
@@ -533,6 +535,59 @@ namespace PlunkAndPlunder.UI
                 actionButtons["BuildShip"].interactable = canBuildShip;
             }
 
+            // Upgrade Structure - show if Shipyard (to Naval Yard) or Naval Yard (to Naval Fortress) selected
+            bool showUpgradeStructure = false;
+            bool canUpgradeStructure = false;
+            string upgradeStructureLabel = "Upgrade Structure";
+            int upgradeStructureCost = 0;
+            if (selectedStructure != null && selectedStructure.ownerId == 0)
+            {
+                if (selectedStructure.type == StructureType.SHIPYARD)
+                {
+                    showUpgradeStructure = true;
+                    upgradeStructureCost = BuildingConfig.UPGRADE_TO_NAVAL_YARD_COST;
+                    upgradeStructureLabel = $"Upgrade to Naval Yard ({upgradeStructureCost}g)";
+                    canUpgradeStructure = humanPlayer.gold >= upgradeStructureCost;
+                }
+                else if (selectedStructure.type == StructureType.NAVAL_YARD)
+                {
+                    showUpgradeStructure = true;
+                    upgradeStructureCost = BuildingConfig.UPGRADE_TO_NAVAL_FORTRESS_COST;
+                    upgradeStructureLabel = $"Upgrade to Naval Fortress ({upgradeStructureCost}g)";
+                    canUpgradeStructure = humanPlayer.gold >= upgradeStructureCost;
+                }
+            }
+            actionButtons["UpgradeStructure"].gameObject.SetActive(showUpgradeStructure);
+            if (showUpgradeStructure)
+            {
+                // Update button label
+                Text buttonText = actionButtons["UpgradeStructure"].GetComponentInChildren<Text>();
+                if (buttonText != null)
+                {
+                    buttonText.text = upgradeStructureLabel;
+                }
+                actionButtons["UpgradeStructure"].interactable = canUpgradeStructure;
+            }
+
+            // Build Galleon - only show if Naval Fortress is selected
+            bool showBuildGalleon = false;
+            bool canBuildGalleon = false;
+            if (selectedStructure != null &&
+                selectedStructure.type == StructureType.NAVAL_FORTRESS &&
+                selectedStructure.ownerId == 0)
+            {
+                showBuildGalleon = true;
+                var queue = PlunkAndPlunder.Construction.ConstructionManager.Instance?.GetShipyardQueue(selectedStructure.id);
+                int queueCount = queue?.Count ?? 0;
+                canBuildGalleon = queueCount < BuildingConfig.MAX_QUEUE_SIZE &&
+                                 humanPlayer.gold >= BuildingConfig.BUILD_GALLEON_COST;
+            }
+            actionButtons["BuildGalleon"].gameObject.SetActive(showBuildGalleon);
+            if (showBuildGalleon)
+            {
+                actionButtons["BuildGalleon"].interactable = canBuildGalleon;
+            }
+
             // Upgrade buttons - only show if ship is at friendly shipyard
             bool showUpgrades = false;
             if (selectedUnit != null && selectedUnit.ownerId == 0)
@@ -646,6 +701,30 @@ namespace PlunkAndPlunder.UI
             if (gameHUD != null)
             {
                 gameHUD.SendMessage("OnBuildShipClicked", SendMessageOptions.DontRequireReceiver);
+            }
+        }
+
+        private void OnUpgradeStructure()
+        {
+            Debug.Log("[LeftPanelHUD] Upgrade Structure button clicked");
+
+            // Trigger upgrade via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnUpgradeStructureClicked", SendMessageOptions.DontRequireReceiver);
+            }
+        }
+
+        private void OnBuildGalleon()
+        {
+            Debug.Log("[LeftPanelHUD] Build Galleon button clicked");
+
+            // Trigger build via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnBuildGalleonClicked", SendMessageOptions.DontRequireReceiver);
             }
         }
 

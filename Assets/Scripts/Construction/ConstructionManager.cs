@@ -107,6 +107,45 @@ namespace PlunkAndPlunder.Construction
         }
 
         /// <summary>
+        /// Queue a Galleon for construction at a Naval Fortress
+        /// </summary>
+        public ConstructionResult QueueGalleon(int playerId, string navalFortressId)
+        {
+            // 1. Validate request
+            var validation = ConstructionValidator.ValidateQueueGalleon(
+                playerId, navalFortressId, state, gameState
+            );
+
+            if (!validation.isValid)
+            {
+                Debug.LogWarning($"[ConstructionManager] QueueGalleon validation failed: {validation.reason}");
+                return ConstructionResult.Failure(validation.reason);
+            }
+
+            // 2. Create and execute command
+            var command = new QueueGalleonCommand(playerId, navalFortressId);
+            var result = command.Execute(state, gameState);
+
+            if (result.success)
+            {
+                // 3. Emit event
+                var job = state.GetJob(result.jobId);
+                OnConstructionQueued?.Invoke(new ConstructionQueuedEvent
+                {
+                    jobId = result.jobId,
+                    shipyardId = navalFortressId,
+                    itemType = "Galleon",
+                    turnsRequired = job.turnsTotal,
+                    cost = job.costPaid
+                });
+
+                Debug.Log($"[ConstructionManager] Successfully queued Galleon at {navalFortressId}");
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Deploy a ship as a shipyard (consumes ship)
         /// </summary>
         public ConstructionResult DeployShipyard(int playerId, string shipId, HexCoord position)

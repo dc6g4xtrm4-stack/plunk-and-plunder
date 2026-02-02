@@ -70,20 +70,32 @@ namespace PlunkAndPlunder.Resolution
                 Debug.LogError($"[TurnResolver] ConstructionManager not found! Construction will not process this turn.");
             }
 
+            // Process pirate spawning at start of turn (PIRATE SYSTEM)
+            GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
+            events.AddRange(PlunkAndPlunder.AI.PirateSpawner.ProcessPirateSpawning(gameState, turnNumber));
+
             // Sort orders by type priority and then by unit ID for determinism
-            // Priority: DeployShipyard > BuildShip > RepairShip > UpgradeShip > UpgradeSails > UpgradeCannons > UpgradeMaxLife > Move
+            // Priority: UpgradeStructure > DeployShipyard > BuildShip > BuildGalleon > RepairShip > UpgradeShip > UpgradeSails > UpgradeCannons > UpgradeMaxLife > AttackShipyard > Move
             List<IOrder> sortedOrders = orders
                 .OrderBy(o => GetOrderPriority(o))
                 .ThenBy(o => o.unitId)
                 .ToList();
 
-            // Process deploy shipyard orders first
+            // Process structure upgrade orders first
+            List<UpgradeStructureOrder> upgradeStructureOrders = sortedOrders.OfType<UpgradeStructureOrder>().ToList();
+            events.AddRange(ResolveUpgradeStructureOrders(upgradeStructureOrders));
+
+            // Process deploy shipyard orders
             List<DeployShipyardOrder> deployOrders = sortedOrders.OfType<DeployShipyardOrder>().ToList();
             events.AddRange(ResolveDeployShipyardOrders(deployOrders));
 
             // Process build ship orders
             List<BuildShipOrder> buildOrders = sortedOrders.OfType<BuildShipOrder>().ToList();
             events.AddRange(ResolveBuildShipOrders(buildOrders));
+
+            // Process build galleon orders
+            List<BuildGalleonOrder> buildGalleonOrders = sortedOrders.OfType<BuildGalleonOrder>().ToList();
+            events.AddRange(ResolveBuildGalleonOrders(buildGalleonOrders));
 
             // Process repair ship orders
             List<RepairShipOrder> repairOrders = sortedOrders.OfType<RepairShipOrder>().ToList();
@@ -148,24 +160,28 @@ namespace PlunkAndPlunder.Resolution
         {
             switch (order.GetOrderType())
             {
+                case OrderType.UpgradeStructure:
+                    return 0; // Structure upgrades first (before deploying new shipyards)
                 case OrderType.DeployShipyard:
-                    return 0;
-                case OrderType.BuildShip:
                     return 1;
-                case OrderType.RepairShip:
+                case OrderType.BuildShip:
                     return 2;
-                case OrderType.UpgradeShip:
-                    return 3;
-                case OrderType.UpgradeSails:
+                case OrderType.BuildGalleon:
+                    return 3; // Galleon building after regular ships
+                case OrderType.RepairShip:
                     return 4;
-                case OrderType.UpgradeCannons:
+                case OrderType.UpgradeShip:
                     return 5;
-                case OrderType.UpgradeMaxLife:
+                case OrderType.UpgradeSails:
                     return 6;
-                case OrderType.AttackShipyard:
-                    return 7; // Process attacks before moves
-                case OrderType.Move:
+                case OrderType.UpgradeCannons:
+                    return 7;
+                case OrderType.UpgradeMaxLife:
                     return 8;
+                case OrderType.AttackShipyard:
+                    return 9; // Process attacks before moves
+                case OrderType.Move:
+                    return 10;
                 default:
                     return 999;
             }
@@ -845,6 +861,12 @@ namespace PlunkAndPlunder.Resolution
             if (attackerDestroyed)
             {
                 events.Add(new UnitDestroyedEvent(turnNumber, unit1.id, unit1.ownerId, location));
+
+                // Award gold if a pirate was killed
+                GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
+                events.AddRange(PlunkAndPlunder.AI.PirateSpawner.AwardPirateKillGold(
+                    gameState, unit1, unit2, turnNumber));
+
                 if (!deferUnitRemoval)
                 {
                     unitManager.RemoveUnit(unit1.id);
@@ -860,6 +882,12 @@ namespace PlunkAndPlunder.Resolution
             if (defenderDestroyed)
             {
                 events.Add(new UnitDestroyedEvent(turnNumber, unit2.id, unit2.ownerId, location));
+
+                // Award gold if a pirate was killed
+                GameState gameState = new GameState(grid, unitManager, playerManager, structureManager);
+                events.AddRange(PlunkAndPlunder.AI.PirateSpawner.AwardPirateKillGold(
+                    gameState, unit2, unit1, turnNumber));
+
                 if (!deferUnitRemoval)
                 {
                     unitManager.RemoveUnit(unit2.id);
@@ -1969,6 +1997,180 @@ namespace PlunkAndPlunder.Resolution
                 if (enableLogging)
                 {
                     Debug.Log($"[TurnResolver] Player {player.id} earned {totalIncome}g → {player.gold}g total");
+                }
+            }
+
+            return events;
+        }
+
+        private List<GameEvent> ResolveUpgradeStructureOrders(List<UpgradeStructureOrder> orders)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            foreach (UpgradeStructureOrder order in orders)
+            {
+                Structure structure = structureManager.GetStructure(order.structureId);
+                if (structure == null)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Structure {order.structureId} not found for upgrade");
+                    }
+                    continue;
+                }
+
+                // Check ownership
+                if (structure.ownerId != order.playerId)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Player {order.playerId} does not own structure {order.structureId}");
+                    }
+                    continue;
+                }
+
+                // Determine cost and validate upgrade path
+                int cost = 0;
+                string upgradeName = "";
+                if (structure.type == StructureType.SHIPYARD && order.targetType == StructureType.NAVAL_YARD)
+                {
+                    cost = BuildingConfig.UPGRADE_TO_NAVAL_YARD_COST;
+                    upgradeName = "Naval Yard";
+                }
+                else if (structure.type == StructureType.NAVAL_YARD && order.targetType == StructureType.NAVAL_FORTRESS)
+                {
+                    cost = BuildingConfig.UPGRADE_TO_NAVAL_FORTRESS_COST;
+                    upgradeName = "Naval Fortress";
+                }
+                else
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Invalid upgrade path: {structure.type} to {order.targetType}");
+                    }
+                    continue;
+                }
+
+                // Check player currency
+                Player player = playerManager.GetPlayer(order.playerId);
+                if (player == null || player.gold < cost)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] Player {order.playerId} does not have enough gold to upgrade structure (need {cost}, have {player?.gold ?? 0})");
+                    }
+                    continue;
+                }
+
+                // Deduct currency
+                player.gold -= cost;
+
+                // Perform upgrade
+                structure.type = order.targetType;
+                structure.tier += 1;
+
+                // Update max health based on new type
+                switch (order.targetType)
+                {
+                    case StructureType.NAVAL_YARD:
+                        structure.maxHealth = 5;
+                        structure.health = 5; // Full health on upgrade
+                        break;
+                    case StructureType.NAVAL_FORTRESS:
+                        structure.maxHealth = 10;
+                        structure.health = 10; // Full health on upgrade
+                        break;
+                }
+
+                events.Add(new GameEvent(turnNumber, GameEventType.StructureUpgraded,
+                    $"Player {order.playerId} upgraded structure {structure.id} to {upgradeName} at {structure.position}"));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] Player {order.playerId} upgraded {structure.id} to {upgradeName} (cost: {cost} gold)");
+                }
+            }
+
+            return events;
+        }
+
+        private List<GameEvent> ResolveBuildGalleonOrders(List<BuildGalleonOrder> orders)
+        {
+            List<GameEvent> events = new List<GameEvent>();
+
+            foreach (BuildGalleonOrder order in orders)
+            {
+                // NEW SYSTEM: Use ConstructionManager for queueing Galleons
+                if (ConstructionManager.Instance != null)
+                {
+                    var result = ConstructionManager.Instance.QueueGalleon(order.playerId, order.navalFortressId);
+
+                    if (result.success)
+                    {
+                        events.Add(new GameEvent(turnNumber, GameEventType.ShipQueued,
+                            $"Player {order.playerId} queued Galleon at Naval Fortress {order.navalFortressId}"));
+
+                        if (enableLogging)
+                        {
+                            Debug.Log($"[TurnResolver] Player {order.playerId} queued Galleon at {order.navalFortressId}, job {result.jobId}");
+                        }
+                    }
+                    else
+                    {
+                        if (enableLogging)
+                        {
+                            Debug.LogWarning($"[TurnResolver] Failed to queue Galleon: {result.reason}");
+                        }
+                    }
+
+                    continue; // Skip legacy code below
+                }
+
+                // LEGACY FALLBACK: Direct building (if ConstructionManager not available)
+                Structure navalFortress = structureManager.GetStructure(order.navalFortressId);
+                if (navalFortress == null || navalFortress.type != StructureType.NAVAL_FORTRESS)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Naval Fortress {order.navalFortressId} not found");
+                    }
+                    continue;
+                }
+
+                if (navalFortress.ownerId != order.playerId)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Player {order.playerId} does not own Naval Fortress {order.navalFortressId}");
+                    }
+                    continue;
+                }
+
+                // Check player currency
+                Player player = playerManager.GetPlayer(order.playerId);
+                if (player == null || player.gold < BuildingConfig.BUILD_GALLEON_COST)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.LogWarning($"[TurnResolver] LEGACY: Player {order.playerId} does not have enough gold to build Galleon");
+                    }
+                    continue;
+                }
+
+                // Deduct currency
+                player.gold -= BuildingConfig.BUILD_GALLEON_COST;
+
+                // Create Galleon directly (legacy path)
+                string galleonId = System.Guid.NewGuid().ToString();
+                Unit galleon = new Unit(galleonId, order.playerId, navalFortress.position, UnitType.GALLEON);
+                unitManager.AddUnit(galleon);
+
+                events.Add(new GameEvent(turnNumber, GameEventType.ShipBuilt,
+                    $"Player {order.playerId} built Galleon {galleonId} at {navalFortress.position}"));
+
+                if (enableLogging)
+                {
+                    Debug.Log($"[TurnResolver] LEGACY: Player {order.playerId} built Galleon {galleonId} at {navalFortress.position}");
                 }
             }
 

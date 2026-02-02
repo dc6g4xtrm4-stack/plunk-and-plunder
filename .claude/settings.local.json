@@ -28,7 +28,8 @@
       "Bash(git ls-tree:*)",
       "Bash(\"/c/Program Files/Unity/Hub/Editor/6000.0.30f1/Editor/Data/Tools/RoslynScripts/unity_csc.bat\" /noconfig @Temp/UnityTempFile-0)",
       "Bash(code:*)",
-      "Bash(if exist TestCompile.cs del TestCompile.cs)"
+      "Bash(if exist TestCompile.cs del TestCompile.cs)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

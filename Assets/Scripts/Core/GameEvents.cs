@@ -47,7 +47,8 @@ namespace PlunkAndPlunder.Core
         ContestedTileCreated, // NEW: Encounter system event
         ContestedTileResolved, // NEW: Encounter system event
         StructureAttacked, // NEW: Deterministic structure damage
-        StructureCaptured // NEW: Structure ownership changed
+        StructureCaptured, // NEW: Structure ownership changed
+        StructureUpgraded // NEW: Structure tier upgraded
     }
 
     [Serializable]

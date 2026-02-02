@@ -710,6 +710,96 @@ namespace PlunkAndPlunder.UI
             }
         }
 
+        public void OnUpgradeStructureClicked()
+        {
+            if (GameManager.Instance == null || selectedStructure == null)
+                return;
+
+            // Verify structure is owned by human player
+            if (selectedStructure.ownerId != 0)
+                return;
+
+            GameState state = GameManager.Instance.state;
+            var player = state.playerManager.GetPlayer(0);
+
+            // Determine target type and cost based on current structure type
+            StructureType targetType;
+            int cost;
+            if (selectedStructure.type == StructureType.SHIPYARD)
+            {
+                targetType = StructureType.NAVAL_YARD;
+                cost = BuildingConfig.UPGRADE_TO_NAVAL_YARD_COST;
+            }
+            else if (selectedStructure.type == StructureType.NAVAL_YARD)
+            {
+                targetType = StructureType.NAVAL_FORTRESS;
+                cost = BuildingConfig.UPGRADE_TO_NAVAL_FORTRESS_COST;
+            }
+            else
+            {
+                Debug.LogWarning($"[GameHUD] Structure type {selectedStructure.type} cannot be upgraded");
+                return;
+            }
+
+            // Check if player has enough gold
+            if (player == null || player.gold < cost)
+            {
+                Debug.LogWarning($"[GameHUD] Not enough gold to upgrade structure. Need {cost}, have {player?.gold ?? 0}");
+                return;
+            }
+
+            // Create upgrade structure order
+            UpgradeStructureOrder order = new UpgradeStructureOrder(
+                playerId: 0,
+                structureId: selectedStructure.id,
+                structurePosition: selectedStructure.position,
+                targetType: targetType
+            );
+            pendingPlayerOrders.Add(order);
+
+            Debug.Log($"[GameHUD] ✅ Upgrade structure order QUEUED for {selectedStructure.id} to {targetType}! Pending orders: {pendingPlayerOrders.Count}");
+
+            // Refresh UI
+            leftPanelHUD?.UpdateSelection(selectedUnit, selectedStructure, selectedFleet);
+        }
+
+        public void OnBuildGalleonClicked()
+        {
+            if (GameManager.Instance == null || selectedStructure == null)
+                return;
+
+            // Verify structure is a Naval Fortress owned by human player
+            if (selectedStructure.type != StructureType.NAVAL_FORTRESS || selectedStructure.ownerId != 0)
+                return;
+
+            // NEW SYSTEM: Delegate to ConstructionManager
+            if (PlunkAndPlunder.Construction.ConstructionManager.Instance != null)
+            {
+                var result = PlunkAndPlunder.Construction.ConstructionManager.Instance.QueueGalleon(
+                    playerId: 0, // Human player
+                    navalFortressId: selectedStructure.id
+                );
+
+                if (result.success)
+                {
+                    Debug.Log($"[GameHUD] Successfully queued Galleon at {selectedStructure.id}, job {result.jobId}");
+
+                    // Refresh display
+                    SelectStructure(selectedStructure);
+                }
+                else
+                {
+                    // Show error message
+                    Debug.LogWarning($"[GameHUD] Failed to queue Galleon: {result.reason}");
+                }
+            }
+            else
+            {
+                // ConstructionManager not available - this should not happen in normal gameplay
+                Debug.LogError("[GameHUD] ConstructionManager not available! Cannot build Galleon.");
+            }
+        }
+
         public void OnUpgradeSailsClicked()
         {
             if (GameManager.Instance == null || selectedUnit == null)

@@ -16,11 +16,13 @@ namespace PlunkAndPlunder.Orders
         Move,
         DeployShipyard,
         BuildShip,
+        BuildGalleon,
         RepairShip,
         UpgradeShip,
         UpgradeSails,
         UpgradeCannons,
         UpgradeMaxLife,
+        UpgradeStructure,
         AttackShipyard
     }
 
@@ -224,6 +226,52 @@ namespace PlunkAndPlunder.Orders
         public OrderType GetOrderType()
         {
             return OrderType.AttackShipyard;
+        }
+    }
+
+    [Serializable]
+    public class UpgradeStructureOrder : IOrder
+    {
+        public string unitId { get; set; } // Empty for structure orders
+        public int playerId { get; set; }
+        public string structureId;
+        public HexCoord structurePosition;
+        public Structures.StructureType targetType; // What to upgrade to
+
+        public UpgradeStructureOrder(int playerId, string structureId, HexCoord structurePosition, Structures.StructureType targetType)
+        {
+            this.unitId = ""; // Structure orders don't command a unit
+            this.playerId = playerId;
+            this.structureId = structureId;
+            this.structurePosition = structurePosition;
+            this.targetType = targetType;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.UpgradeStructure;
+        }
+    }
+
+    [Serializable]
+    public class BuildGalleonOrder : IOrder
+    {
+        public string unitId { get; set; } // Empty for build orders
+        public int playerId { get; set; }
+        public string navalFortressId;
+        public HexCoord navalFortressPosition;
+
+        public BuildGalleonOrder(int playerId, string navalFortressId, HexCoord navalFortressPosition)
+        {
+            this.unitId = ""; // Build orders don't command a unit
+            this.playerId = playerId;
+            this.navalFortressId = navalFortressId;
+            this.navalFortressPosition = navalFortressPosition;
+        }
+
+        public OrderType GetOrderType()
+        {
+            return OrderType.BuildGalleon;
         }
     }
 }

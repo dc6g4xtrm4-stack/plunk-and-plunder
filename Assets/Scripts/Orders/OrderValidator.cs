@@ -793,5 +793,142 @@ namespace PlunkAndPlunder.Orders
 
             return true;
         }
+
+        public bool ValidateUpgradeStructureOrder(UpgradeStructureOrder order, out string error)
+        {
+            error = null;
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check player manager is available
+            if (playerManager == null)
+            {
+                error = "Player manager not available";
+                return false;
+            }
+
+            // Check structure exists
+            Structure structure = structureManager.GetStructure(order.structureId);
+            if (structure == null)
+            {
+                error = "Structure does not exist";
+                return false;
+            }
+
+            // Check ownership
+            if (structure.ownerId != order.playerId)
+            {
+                error = "Player does not own this structure";
+                return false;
+            }
+
+            // Check position matches
+            if (!structure.position.Equals(order.structurePosition))
+            {
+                error = "Position does not match structure position";
+                return false;
+            }
+
+            // Validate upgrade path
+            int cost = 0;
+            if (structure.type == StructureType.SHIPYARD && order.targetType == StructureType.NAVAL_YARD)
+            {
+                cost = BuildingConfig.UPGRADE_TO_NAVAL_YARD_COST;
+            }
+            else if (structure.type == StructureType.NAVAL_YARD && order.targetType == StructureType.NAVAL_FORTRESS)
+            {
+                cost = BuildingConfig.UPGRADE_TO_NAVAL_FORTRESS_COST;
+            }
+            else
+            {
+                error = $"Invalid upgrade path: {structure.type} cannot upgrade to {order.targetType}";
+                return false;
+            }
+
+            // Check player has enough currency
+            Player player = playerManager.GetPlayer(order.playerId);
+            if (player == null)
+            {
+                error = "Player does not exist";
+                return false;
+            }
+
+            if (player.gold < cost)
+            {
+                error = $"Not enough gold. Need {cost}, have {player.gold}";
+                return false;
+            }
+
+            return true;
+        }
+
+        public bool ValidateBuildGalleonOrder(BuildGalleonOrder order, out string error)
+        {
+            error = null;
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check player manager is available
+            if (playerManager == null)
+            {
+                error = "Player manager not available";
+                return false;
+            }
+
+            // Check naval fortress exists
+            Structure navalFortress = structureManager.GetStructure(order.navalFortressId);
+            if (navalFortress == null)
+            {
+                error = "Naval Fortress does not exist";
+                return false;
+            }
+
+            // Check structure type
+            if (navalFortress.type != StructureType.NAVAL_FORTRESS)
+            {
+                error = "Structure is not a Naval Fortress. Galleons can only be built at Naval Fortresses.";
+                return false;
+            }
+
+            // Check ownership
+            if (navalFortress.ownerId != order.playerId)
+            {
+                error = "Player does not own this Naval Fortress";
+                return false;
+            }
+
+            // Check position matches
+            if (!navalFortress.position.Equals(order.navalFortressPosition))
+            {
+                error = "Position does not match Naval Fortress position";
+                return false;
+            }
+
+            // Check player has enough currency
+            Player player = playerManager.GetPlayer(order.playerId);
+            if (player == null)
+            {
+                error = "Player does not exist";
+                return false;
+            }
+
+            if (player.gold < BuildingConfig.BUILD_GALLEON_COST)
+            {
+                error = $"Not enough gold. Need {BuildingConfig.BUILD_GALLEON_COST}, have {player.gold}";
+                return false;
+            }
+
+            return true;
+        }
     }
 }

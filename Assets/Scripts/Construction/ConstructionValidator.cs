@@ -52,6 +52,45 @@ namespace PlunkAndPlunder.Construction
         }
 
         /// <summary>
+        /// Validate queueing a Galleon at a Naval Fortress
+        /// </summary>
+        public static ValidationResult ValidateQueueGalleon(
+            int playerId,
+            string navalFortressId,
+            ConstructionState constructionState,
+            GameState gameState)
+        {
+            // 1. Naval Fortress exists
+            Structure navalFortress = gameState.structureManager.GetStructure(navalFortressId);
+            if (navalFortress == null)
+                return ValidationResult.Invalid("Naval Fortress not found");
+
+            if (navalFortress.type != StructureType.NAVAL_FORTRESS)
+                return ValidationResult.Invalid("Structure is not a Naval Fortress. Galleons can only be built at Naval Fortresses.");
+
+            // 2. Player owns the Naval Fortress
+            if (navalFortress.ownerId != playerId)
+                return ValidationResult.Invalid("You don't own this Naval Fortress");
+
+            // 3. Queue has space
+            if (constructionState.IsQueueFull(navalFortressId))
+            {
+                int queueLength = constructionState.GetQueueLength(navalFortressId);
+                return ValidationResult.Invalid($"Queue is full ({queueLength}/{BuildingConfig.MAX_QUEUE_SIZE})");
+            }
+
+            // 4. Player has gold
+            Player player = gameState.playerManager.GetPlayer(playerId);
+            if (player == null || player.gold < BuildingConfig.BUILD_GALLEON_COST)
+            {
+                int currentGold = player?.gold ?? 0;
+                return ValidationResult.Invalid($"Insufficient gold (need {BuildingConfig.BUILD_GALLEON_COST}g, have {currentGold}g)");
+            }
+
+            return ValidationResult.Valid();
+        }
+
+        /// <summary>
         /// Validate deploying a ship as a shipyard
         /// </summary>
         public static ValidationResult ValidateDeployShipyard(

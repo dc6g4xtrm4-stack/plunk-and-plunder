@@ -48,6 +48,19 @@ namespace PlunkAndPlunder.Combat
             int damageToDefender = attacker.cannons;
             int damageToAttacker = defender.cannons;
 
+            // Apply pirate damage multiplier if applicable
+            if (attacker.type == UnitType.PIRATE_SHIP)
+            {
+                damageToDefender *= BuildingConfig.PIRATE_DAMAGE_MULTIPLIER;
+                Debug.Log($"[CombatResolver] Pirate damage multiplier applied: {attacker.cannons} × {BuildingConfig.PIRATE_DAMAGE_MULTIPLIER} = {damageToDefender}");
+            }
+
+            if (defender.type == UnitType.PIRATE_SHIP)
+            {
+                damageToAttacker *= BuildingConfig.PIRATE_DAMAGE_MULTIPLIER;
+                Debug.Log($"[CombatResolver] Pirate damage multiplier applied: {defender.cannons} × {BuildingConfig.PIRATE_DAMAGE_MULTIPLIER} = {damageToAttacker}");
+            }
+
             Debug.Log($"[CombatResolver] {attacker.id} ({attacker.cannons} cannons) vs " +
                       $"{defender.id} ({defender.cannons} cannons) → " +
                       $"Damage: {damageToDefender} to defender, {damageToAttacker} to attacker");

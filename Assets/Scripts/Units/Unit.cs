@@ -23,6 +23,9 @@ namespace PlunkAndPlunder.Units
         public int sails; // Affects movement range
         public int cannons; // Affects combat effectiveness
 
+        // Multi-tile unit support (for Galleons)
+        public List<HexCoord> occupiedTiles; // Additional tiles occupied by multi-tile units
+
         // Multi-turn combat tracking
         public bool isInCombat;
         public string combatOpponentId;
@@ -56,14 +59,46 @@ namespace PlunkAndPlunder.Units
             this.ownerId = ownerId;
             this.position = position;
             this.type = type;
-            this.health = 10; // Ships start with 10 HP
-            this.maxHealth = 10;
             this.facingAngle = 0f; // Default facing east
-            this.movementRemaining = GetMovementCapacity(); // Initialize with full movement
-            this.sails = 0; // Base ships have no sail upgrades
-            this.cannons = 2; // Base ships start with 2 cannons (Sloop equivalent)
             this.isInCombat = false;
             this.combatOpponentId = null;
+            this.occupiedTiles = new List<HexCoord>();
+
+            // Initialize stats based on unit type
+            switch (type)
+            {
+                case UnitType.SHIP:
+                    this.health = 10;
+                    this.maxHealth = 10;
+                    this.sails = 0;
+                    this.cannons = 2;
+                    break;
+
+                case UnitType.GALLEON:
+                    this.health = 30;           // Galleons are much tougher
+                    this.maxHealth = 30;
+                    this.sails = 2;             // Start with 2 sail upgrades
+                    this.cannons = 7;           // Start with 7 cannons (max for regular ships)
+                    // Galleons occupy 2 tiles - add rear tile
+                    this.occupiedTiles.Add(new HexCoord(position.q - 1, position.r)); // Behind the main position
+                    break;
+
+                case UnitType.PIRATE_SHIP:
+                    this.health = 15;           // Pirates are tougher than regular ships
+                    this.maxHealth = 15;
+                    this.sails = 1;             // Pirates are faster
+                    this.cannons = 5;           // Pirates have more firepower
+                    break;
+
+                default:
+                    this.health = 10;
+                    this.maxHealth = 10;
+                    this.sails = 0;
+                    this.cannons = 2;
+                    break;
+            }
+
+            this.movementRemaining = GetMovementCapacity(); // Initialize with full movement
 
             // Generate a random ship name
             this.name = GenerateShipName();
@@ -120,7 +155,22 @@ namespace PlunkAndPlunder.Units
         /// </summary>
         public int GetMovementCapacity()
         {
-            // Determine tier based on maxHealth thresholds
+            // Galleons have enhanced movement capabilities
+            if (type == UnitType.GALLEON)
+            {
+                // Galleons: Base 6 + sails upgrades (can reach up to 4 tiles with max upgrades)
+                // With 2 base sails + up to 3 more upgrades = 5 sails max = 11 movement (more than 4 tiles)
+                // But we'll cap practical movement at a reasonable level
+                return 6 + sails; // Base 6, can go higher with upgrades
+            }
+
+            // Pirate ships are faster
+            if (type == UnitType.PIRATE_SHIP)
+            {
+                return 4 + sails; // Pirates are faster than regular ships
+            }
+
+            // Regular ships: Determine tier based on maxHealth thresholds
             int tier = 1;
             if (maxHealth >= 21)
                 tier = 3;
@@ -165,6 +215,8 @@ namespace PlunkAndPlunder.Units
 
     public enum UnitType
     {
-        SHIP
+        SHIP,
+        GALLEON,       // Large 2-tile ship with enhanced capabilities
+        PIRATE_SHIP    // Pirate ship with enhanced damage and speed
     }
 }
