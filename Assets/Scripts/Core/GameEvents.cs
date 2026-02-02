@@ -349,7 +349,7 @@ namespace PlunkAndPlunder.Core
         public StructureAttackedEvent(int turnNumber, string attackerUnitId, string structureId,
             int attackingPlayerId, int defendingPlayerId, HexCoord position, int oldHealth, int newHealth)
             : base(turnNumber, GameEventType.StructureAttacked,
-                $"Player {attackingPlayerId} attacked shipyard at {position} ({oldHealth} HP → {newHealth} HP)")
+                $"Ship {attackerUnitId} dealt {oldHealth - newHealth} damage to shipyard at {position} ({newHealth} HP remaining)")
         {
             this.attackerUnitId = attackerUnitId;
             this.structureId = structureId;
