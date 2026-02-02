@@ -41,7 +41,8 @@ namespace PlunkAndPlunder.Core
         private CollisionYieldUI collisionYieldUI;
         private EncounterUI encounterUI; // NEW: Encounter system UI
         private CombatResultsHUD combatResultsHUD; // NEW: Deterministic combat results display
-        private PlayerStatsHUD playerStatsHUD;
+        // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
+        // private PlayerStatsHUD playerStatsHUD;
 
         // Combat tracking
         private Dictionary<string, int> combatRounds; // Track combat rounds per unit pair
@@ -155,10 +156,11 @@ namespace PlunkAndPlunder.Core
                 combatResultsHUD = combatResultsHUDObj.AddComponent<CombatResultsHUD>();
                 combatResultsHUD.Initialize();
 
-                GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
-                playerStatsHUDObj.transform.SetParent(canvas.transform, false);
-                playerStatsHUD = playerStatsHUDObj.AddComponent<PlayerStatsHUD>();
-                playerStatsHUD.Initialize();
+                // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
+                // GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
+                // playerStatsHUDObj.transform.SetParent(canvas.transform, false);
+                // playerStatsHUD = playerStatsHUDObj.AddComponent<PlayerStatsHUD>();
+                // playerStatsHUD.Initialize();
             }
 
             // Initialization (map, structures, units) already handled by engine.InitializeGame()
@@ -166,12 +168,13 @@ namespace PlunkAndPlunder.Core
             // Trigger initial render
             OnGameStateUpdated?.Invoke(state);
 
+            // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD
-            if (playerStatsHUD != null)
-            {
-                playerStatsHUD.UpdateStats(state);
-                playerStatsHUD.Show();
-            }
+            // if (playerStatsHUD != null)
+            // {
+            //     playerStatsHUD.UpdateStats(state);
+            //     playerStatsHUD.Show();
+            // }
 
             // Transition to game
             ChangePhase(GamePhase.Planning);
@@ -227,11 +230,12 @@ namespace PlunkAndPlunder.Core
             Debug.Log($"[GameManager] Turn {state.turnNumber} - Planning phase started");
             GameLogger.LogGameState(state);
 
+            // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD after awarding gold
-            if (playerStatsHUD != null)
-            {
-                playerStatsHUD.UpdateStats(state);
-            }
+            // if (playerStatsHUD != null)
+            // {
+            //     playerStatsHUD.UpdateStats(state);
+            // }
 
             // COMBAT PATH QUEUE: Set default attack paths for units in ongoing combat
             // When combat occurs, units should automatically continue attacking unless player changes orders
@@ -286,19 +290,46 @@ namespace PlunkAndPlunder.Core
 
         public void SubmitOrders(int playerId, List<IOrder> orders)
         {
+            Debug.Log($"🎮 [GameManager] ========== SubmitOrders CALLED! ==========");
+            Debug.Log($"[GameManager] playerId={playerId}, orders.Count={orders?.Count ?? 0}");
+
+            if (orders != null)
+            {
+                foreach (var order in orders)
+                {
+                    Debug.Log($"[GameManager]   Order: {order.GetType().Name}");
+                }
+            }
+
             Player player = state.playerManager.GetPlayer(playerId);
-            if (player == null || player.isEliminated)
+            if (player == null)
+            {
+                Debug.LogError($"[GameManager] ❌ Player {playerId} NOT FOUND!");
                 return;
+            }
+
+            if (player.isEliminated)
+            {
+                Debug.LogWarning($"[GameManager] ⚠️ Player {playerId} is ELIMINATED!");
+                return;
+            }
+
+            Debug.Log($"[GameManager] Player {playerId} validation passed, calling engine.SubmitOrders()...");
 
             // Use engine to validate and submit orders
             bool allReady = engine.SubmitOrders(playerId, orders);
 
-            Debug.Log($"[GameManager] Player {playerId} submitted orders (validated by engine)");
+            Debug.Log($"[GameManager] ✅ Player {playerId} submitted {orders.Count} orders (validated by engine), allReady={allReady}");
 
             // Check if all players ready
             if (allReady)
             {
+                Debug.Log("[GameManager] All players ready! Changing phase to Resolving...");
                 ChangePhase(GamePhase.Resolving);
+            }
+            else
+            {
+                Debug.Log($"[GameManager] Not all players ready yet. Waiting for other players...");
             }
         }
 
@@ -372,11 +403,12 @@ namespace PlunkAndPlunder.Core
             // Trigger visual update after each animation step
             OnGameStateUpdated?.Invoke(updatedState);
 
+            // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD
-            if (playerStatsHUD != null)
-            {
-                playerStatsHUD.UpdateStats(updatedState);
-            }
+            // if (playerStatsHUD != null)
+            // {
+            //     playerStatsHUD.UpdateStats(updatedState);
+            // }
         }
 
         private void HandleAnimationComplete()
@@ -393,11 +425,12 @@ namespace PlunkAndPlunder.Core
             // Final state update
             OnGameStateUpdated?.Invoke(state);
 
+            // DEPRECATED: Player stats now shown in LeftPanelHUD
             // Update player stats HUD
-            if (playerStatsHUD != null)
-            {
-                playerStatsHUD.UpdateStats(state);
-            }
+            // if (playerStatsHUD != null)
+            // {
+            //     playerStatsHUD.UpdateStats(state);
+            // }
 
             // Check for game over
             if (state.playerManager.GetWinner() != null)

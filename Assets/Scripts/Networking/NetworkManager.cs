@@ -49,6 +49,10 @@ namespace PlunkAndPlunder.Networking
                 case NetworkMode.Steam:
                     Transport = new SteamTransport();
                     break;
+
+                case NetworkMode.DirectConnection:
+                    Transport = new TCPTransport();
+                    break;
             }
 
             Transport.Initialize();
@@ -103,6 +107,15 @@ namespace PlunkAndPlunder.Networking
             OnError?.Invoke(error);
         }
 
+        private void Update()
+        {
+            // Process events from background threads (needed for TCP transport)
+            if (Transport is TCPTransport tcpTransport)
+            {
+                tcpTransport.ProcessMainThreadQueue();
+            }
+        }
+
         private void OnDestroy()
         {
             Transport?.Shutdown();
@@ -112,6 +125,7 @@ namespace PlunkAndPlunder.Networking
     public enum NetworkMode
     {
         Offline,
-        Steam
+        Steam,
+        DirectConnection
     }
 }

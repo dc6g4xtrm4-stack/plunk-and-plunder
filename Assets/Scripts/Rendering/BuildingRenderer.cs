@@ -75,7 +75,8 @@ namespace PlunkAndPlunder.Rendering
 
             if (created > 0 || updated > 0)
             {
-                Debug.Log($"[BuildingRenderer] Rendered buildings: {created} created, {updated} updated, {buildingObjects.Count} total");
+                // Verbose logging disabled for performance (called every animation frame)
+            // Debug.Log($"[BuildingRenderer] Rendered buildings: {created} created, {updated} updated, {buildingObjects.Count} total");
             }
         }
 

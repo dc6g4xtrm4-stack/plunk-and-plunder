@@ -77,42 +77,81 @@ namespace PlunkAndPlunder.Map
             return path;
         }
 
-        // Simple priority queue for A*
+        // Min-heap priority queue for A* (O(log n) operations)
         private class PriorityQueue<T>
         {
-            private List<(T item, int priority)> elements = new List<(T, int)>();
+            private List<(T item, int priority)> heap = new List<(T, int)>();
+            private HashSet<T> itemSet = new HashSet<T>(); // O(1) Contains check
 
-            public int Count => elements.Count;
+            public int Count => heap.Count;
 
             public void Enqueue(T item, int priority)
             {
-                elements.Add((item, priority));
+                heap.Add((item, priority));
+                itemSet.Add(item);
+                BubbleUp(heap.Count - 1);
             }
 
             public T Dequeue()
             {
-                int bestIndex = 0;
-                for (int i = 1; i < elements.Count; i++)
-                {
-                    if (elements[i].priority < elements[bestIndex].priority)
-                    {
-                        bestIndex = i;
-                    }
-                }
+                T result = heap[0].item;
+                itemSet.Remove(result);
 
-                T bestItem = elements[bestIndex].item;
-                elements.RemoveAt(bestIndex);
-                return bestItem;
+                int lastIndex = heap.Count - 1;
+                heap[0] = heap[lastIndex];
+                heap.RemoveAt(lastIndex);
+
+                if (heap.Count > 0)
+                    BubbleDown(0);
+
+                return result;
             }
 
             public bool Contains(T item)
             {
-                foreach (var element in elements)
+                return itemSet.Contains(item);
+            }
+
+            private void BubbleUp(int index)
+            {
+                while (index > 0)
                 {
-                    if (EqualityComparer<T>.Default.Equals(element.item, item))
-                        return true;
+                    int parentIndex = (index - 1) / 2;
+                    if (heap[index].priority >= heap[parentIndex].priority)
+                        break;
+
+                    Swap(index, parentIndex);
+                    index = parentIndex;
                 }
-                return false;
+            }
+
+            private void BubbleDown(int index)
+            {
+                while (true)
+                {
+                    int leftChild = 2 * index + 1;
+                    int rightChild = 2 * index + 2;
+                    int smallest = index;
+
+                    if (leftChild < heap.Count && heap[leftChild].priority < heap[smallest].priority)
+                        smallest = leftChild;
+
+                    if (rightChild < heap.Count && heap[rightChild].priority < heap[smallest].priority)
+                        smallest = rightChild;
+
+                    if (smallest == index)
+                        break;
+
+                    Swap(index, smallest);
+                    index = smallest;
+                }
+            }
+
+            private void Swap(int i, int j)
+            {
+                var temp = heap[i];
+                heap[i] = heap[j];
+                heap[j] = temp;
             }
         }
     }

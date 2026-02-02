@@ -59,8 +59,8 @@ namespace PlunkAndPlunder.Core
             hexRendererObj.transform.SetParent(renderersObj.transform);
             HexRenderer hexRenderer = hexRendererObj.AddComponent<HexRenderer>();
 
-            // Add globe wrapping effect
-            GlobeEffect globeEffect = hexRendererObj.AddComponent<GlobeEffect>();
+            // Globe effect disabled - too extreme
+            // GlobeEffect globeEffect = hexRendererObj.AddComponent<GlobeEffect>();
 
             GameObject unitRendererObj = new GameObject("UnitRenderer");
             unitRendererObj.transform.SetParent(renderersObj.transform);
@@ -109,6 +109,11 @@ namespace PlunkAndPlunder.Core
             GameObject uiObj = new GameObject("UIBootstrapper");
             uiObj.AddComponent<UIBootstrapper>();
             Debug.Log("[GameBootstrap] UI created");
+
+            // Create escape menu (always available via ESC key)
+            GameObject escMenuObj = new GameObject("EscapeMenu");
+            escMenuObj.AddComponent<EscapeMenuUI>();
+            Debug.Log("[GameBootstrap] Escape menu created");
         }
 
         private void CreateCamera()

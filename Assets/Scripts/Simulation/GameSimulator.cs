@@ -27,6 +27,15 @@ namespace PlunkAndPlunder.Simulation
         [SerializeField] private bool verboseLogging = true;
         [SerializeField] private string logFilePath = "simulation_log.txt";
 
+        // Public setters for programmatic configuration
+        public void Configure(int turns = 100, int players = 4, float speed = 10f, bool verbose = true)
+        {
+            targetTurns = turns;
+            numPlayers = players;
+            turnsPerSecond = speed;
+            verboseLogging = verbose;
+        }
+
         private GameManager gameManager;
         private StringBuilder logBuilder;
         private bool isSimulating = false;
@@ -102,7 +111,7 @@ namespace PlunkAndPlunder.Simulation
 
             // Initialize player statistics
             playerStats.Clear();
-            foreach (var player in gameManager.state.playerManager.GetAllPlayers())
+            foreach (var player in gameManager.state.playerManager.players)
             {
                 playerStats[player.id] = new PlayerStats
                 {
@@ -188,7 +197,7 @@ namespace PlunkAndPlunder.Simulation
             logBuilder.AppendLine($"\n--- TURN {turnNumber} ---");
 
             // Player summary
-            foreach (var player in state.playerManager.GetAllPlayers())
+            foreach (var player in state.playerManager.players)
             {
                 if (player.isEliminated)
                 {
@@ -226,7 +235,7 @@ namespace PlunkAndPlunder.Simulation
         private void UpdatePlayerStatistics(GameState state)
         {
             // Update turn counters
-            foreach (var player in state.playerManager.GetAllPlayers())
+            foreach (var player in state.playerManager.players)
             {
                 if (!player.isEliminated && playerStats.ContainsKey(player.id))
                 {

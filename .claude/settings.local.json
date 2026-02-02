@@ -21,7 +21,14 @@
       "Bash(echo:*)",
       "Bash(timeout 60 \"C:/Program Files/Unity/Hub/Editor/6000.3.5f2/Editor/Unity.exe\":*)",
       "Bash(timeout 60:*)",
-      "Bash(\"/c/Program Files/Unity/Hub/Editor/2022.3.28f1/Editor/Unity.exe\" -quit -batchmode -projectPath . -executeMethod UnityEditor.Build.BuildPipeline.BuildPlayer -logFile build.log)"
+      "Bash(\"/c/Program Files/Unity/Hub/Editor/2022.3.28f1/Editor/Unity.exe\" -quit -batchmode -projectPath . -executeMethod UnityEditor.Build.BuildPipeline.BuildPlayer -logFile build.log)",
+      "Bash(Orders\" back to top-right bar\n   - Removed left-side player stats panel\n   - Restored playerInfoText to top bar at position \\(600, 0\\)\n   - Text aligned to right as before\n\nRESULT:\n- PLAYER STATS box: Bottom-center of screen\n- Gold/Orders text: Top-right corner of top bar\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(while read file)",
+      "Bash(do [ ! -f \"$file.meta\" ])",
+      "Bash(git ls-tree:*)",
+      "Bash(\"/c/Program Files/Unity/Hub/Editor/6000.0.30f1/Editor/Data/Tools/RoslynScripts/unity_csc.bat\" /noconfig @Temp/UnityTempFile-0)",
+      "Bash(code:*)",
+      "Bash(if exist TestCompile.cs del TestCompile.cs)"
     ]
   }
 }

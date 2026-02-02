@@ -9,9 +9,11 @@ using UnityEngine.UI;
 namespace PlunkAndPlunder.UI
 {
     /// <summary>
+    /// DEPRECATED: This component is being replaced by LeftPanelHUD's integrated player stats section.
     /// Displays all player statistics (gold, ships, shipyards)
     /// Positioned at BOTTOM LEFT of screen, layered on top of other UI elements
     /// </summary>
+    [System.Obsolete("PlayerStatsHUD is deprecated. Use LeftPanelHUD's integrated player stats section instead.")]
     public class PlayerStatsHUD : MonoBehaviour
     {
         private GameObject panel;
@@ -139,7 +141,8 @@ namespace PlunkAndPlunder.UI
             float totalHeight = 50 + (players.Count * rowHeight) + 10; // Title + rows + padding
             panelRect.sizeDelta = new Vector2(350, totalHeight);
 
-            Debug.Log($"[PlayerStatsHUD] Updated stats for {players.Count} players, panel height={totalHeight}");
+            // Verbose logging disabled for performance (called every animation frame)
+            // Debug.Log($"[PlayerStatsHUD] Updated stats for {players.Count} players, panel height={totalHeight}");
         }
 
         private PlayerStatRow CreatePlayerRow(Player player, int shipCount, int shipyardCount, float yOffset)

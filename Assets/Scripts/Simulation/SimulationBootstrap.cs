@@ -33,7 +33,7 @@ namespace PlunkAndPlunder.Simulation
             }
 
             // Check if GameSimulator exists
-            if (FindObjectOfType<GameSimulator>() == null)
+            if (FindFirstObjectByType<GameSimulator>() == null)
             {
                 GameObject simObj = new GameObject("GameSimulator");
                 GameSimulator simulator = simObj.AddComponent<GameSimulator>();
@@ -46,7 +46,7 @@ namespace PlunkAndPlunder.Simulation
         [ContextMenu("Start Simulation Manually")]
         public void StartSimulationManually()
         {
-            GameSimulator sim = FindObjectOfType<GameSimulator>();
+            GameSimulator sim = FindFirstObjectByType<GameSimulator>();
             if (sim != null)
             {
                 sim.StartSimulation();
