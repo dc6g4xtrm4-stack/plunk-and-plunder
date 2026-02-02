@@ -23,6 +23,10 @@ namespace PlunkAndPlunder.UI
         public const int LargeFontSize = 24;
         public const int ButtonFontSize = 18;
 
+        // Reference Resolution (must match UIBootstrapper Canvas settings)
+        public const int ReferenceWidth = 1920;
+        public const int ReferenceHeight = 1080;
+
         // Spacing & Layout
         public const int PanelPadding = 10;
         public const int SectionSpacing = 10;

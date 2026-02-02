@@ -58,8 +58,8 @@ namespace PlunkAndPlunder.UI
             rectTransform.pivot = new Vector2(0f, 0f);
             rectTransform.anchoredPosition = new Vector2(HUDStyles.EdgeMargin, HUDStyles.EdgeMargin);
 
-            // Calculate height: screen height - top bar - 2*edge margin
-            float panelHeight = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
+            // Calculate height: reference height - top bar - 2*edge margin
+            float panelHeight = HUDStyles.ReferenceHeight - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
             rectTransform.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, panelHeight);
 
             // Add background

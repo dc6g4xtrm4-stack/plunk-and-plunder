@@ -46,7 +46,7 @@ namespace PlunkAndPlunder.UI
             topBar.anchorMax = new Vector2(0.5f, 1f);
             topBar.pivot = new Vector2(0.5f, 1f);
             topBar.anchoredPosition = Vector2.zero; // Flush with top
-            topBar.sizeDelta = new Vector2(Screen.width, HUDStyles.TopBarHeight);
+            topBar.sizeDelta = new Vector2(HUDStyles.ReferenceWidth, HUDStyles.TopBarHeight);
         }
 
         private void PositionLeftPanel()
@@ -59,7 +59,7 @@ namespace PlunkAndPlunder.UI
             leftPanel.pivot = new Vector2(0f, 0f);
             leftPanel.anchoredPosition = new Vector2(HUDStyles.EdgeMargin, HUDStyles.EdgeMargin);
 
-            float height = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
+            float height = HUDStyles.ReferenceHeight - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
             leftPanel.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, height);
         }
 
@@ -73,7 +73,7 @@ namespace PlunkAndPlunder.UI
             rightPanel.pivot = new Vector2(1f, 0f);
             rightPanel.anchoredPosition = new Vector2(-HUDStyles.EdgeMargin, HUDStyles.EdgeMargin);
 
-            float height = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
+            float height = HUDStyles.ReferenceHeight - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
             rightPanel.sizeDelta = new Vector2(HUDStyles.RightPanelWidth, height);
         }
 
@@ -86,7 +86,7 @@ namespace PlunkAndPlunder.UI
             bottomBar.anchorMax = new Vector2(0.5f, 0f);
             bottomBar.pivot = new Vector2(0.5f, 0f);
             bottomBar.anchoredPosition = Vector2.zero; // Flush with bottom
-            bottomBar.sizeDelta = new Vector2(Screen.width, HUDStyles.BottomBarHeight);
+            bottomBar.sizeDelta = new Vector2(HUDStyles.ReferenceWidth, HUDStyles.BottomBarHeight);
         }
 
         /// <summary>
