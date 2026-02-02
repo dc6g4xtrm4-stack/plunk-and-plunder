@@ -25,6 +25,7 @@ namespace PlunkAndPlunder.Core
         public PlayerManager playerManager;
         public UnitManager unitManager;
         public StructureManager structureManager;
+        public FleetManager fleetManager;
 
         // Current turn data
         public Dictionary<int, List<IOrder>> pendingOrders; // playerId -> orders

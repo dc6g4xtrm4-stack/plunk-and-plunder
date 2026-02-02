@@ -231,6 +231,56 @@ namespace PlunkAndPlunder.Rendering
         }
 
         /// <summary>
+        /// Show multiple ships attacking one target (Phase 3.2: Multi-ship combat)
+        /// Creates radial connection pattern with staggered animations
+        /// </summary>
+        public void ShowMultiShipCombat(List<Vector3> attackerPositions, Vector3 defenderPos, List<int> damages, int totalDamage)
+        {
+            Debug.Log($"[CombatConnectionRenderer] Multi-ship combat: {attackerPositions.Count} attackers vs 1 defender, total damage: {totalDamage}");
+
+            // Show lines from each attacker with staggered delay
+            for (int i = 0; i < attackerPositions.Count; i++)
+            {
+                Vector3 attackerPos = attackerPositions[i];
+                int damage = i < damages.Count ? damages[i] : 0;
+                float delay = i * 0.2f; // Stagger by 0.2s each
+
+                StartCoroutine(ShowDelayedCombatLine(attackerPos, defenderPos, damage, delay));
+            }
+
+            // Show total damage at defender position (after all lines appear)
+            float totalDelay = attackerPositions.Count * 0.2f + 0.3f;
+            StartCoroutine(ShowTotalDamage(defenderPos, totalDamage, totalDelay));
+        }
+
+        private IEnumerator ShowDelayedCombatLine(Vector3 attackerPos, Vector3 defenderPos, int damage, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            ShowCombatLine(attackerPos, defenderPos, damage, CombatOutcome.Standard);
+        }
+
+        private IEnumerator ShowTotalDamage(Vector3 position, int totalDamage, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+
+            Vector3 textPos = position + Vector3.up * 1.0f;
+            GameObject textObj = CreateDamageText(textPos, totalDamage);
+            textObj.transform.SetParent(transform);
+
+            // Make it bigger and more prominent
+            Text text = textObj.GetComponentInChildren<Text>();
+            if (text != null)
+            {
+                text.fontSize = 48; // Larger than individual damage
+                text.color = Color.yellow; // Yellow for total
+                text.text = $"TOTAL: -{totalDamage}";
+            }
+
+            // Auto-destroy after duration
+            Destroy(textObj, lineDuration);
+        }
+
+        /// <summary>
         /// Clear all active combat lines
         /// </summary>
         public void ClearAllLines()
