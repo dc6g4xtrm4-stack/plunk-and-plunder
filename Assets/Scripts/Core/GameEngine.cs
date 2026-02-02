@@ -401,6 +401,15 @@ namespace PlunkAndPlunder.Core
                     case UpgradeShipOrder upgradeOrder:
                         isValid = orderValidator.ValidateUpgradeShipOrder(upgradeOrder, out error);
                         break;
+                    case UpgradeSailsOrder upgradeSailsOrder:
+                        isValid = orderValidator.ValidateUpgradeSailsOrder(upgradeSailsOrder, out error);
+                        break;
+                    case UpgradeCannonsOrder upgradeCannonsOrder:
+                        isValid = orderValidator.ValidateUpgradeCannonsOrder(upgradeCannonsOrder, out error);
+                        break;
+                    case UpgradeMaxLifeOrder upgradeMaxLifeOrder:
+                        isValid = orderValidator.ValidateUpgradeMaxLifeOrder(upgradeMaxLifeOrder, out error);
+                        break;
                     case AttackShipyardOrder attackOrder:
                         isValid = orderValidator.ValidateAttackShipyardOrder(attackOrder, out error);
                         break;

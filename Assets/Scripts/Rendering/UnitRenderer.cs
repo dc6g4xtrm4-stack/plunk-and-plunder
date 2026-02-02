@@ -135,7 +135,7 @@ namespace PlunkAndPlunder.Rendering
             if (unit.maxHealth >= 21) healthTier = 3;
             else if (unit.maxHealth >= 11) healthTier = 2;
 
-            // 1. Create Hull (brown boat body) - stretched cube, scales with upgrade
+            // 1. Create Main Hull (brown boat body) - stretched cube, scales with upgrade
             GameObject hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
             hull.name = "Hull";
             hull.transform.SetParent(parent.transform);
@@ -144,7 +144,47 @@ namespace PlunkAndPlunder.Rendering
             hull.transform.localRotation = Quaternion.identity;
             SetMaterialColor(hull, brownHull);
 
-            // 2. Create Bow (front pointed part)
+            // 1a. Add Hull Lower Section (darker, for depth)
+            Color darkWood = new Color(0.3f, 0.18f, 0.06f); // Darker brown for lower hull
+            GameObject hullLower = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            hullLower.name = "HullLower";
+            hullLower.transform.SetParent(parent.transform);
+            hullLower.transform.localPosition = new Vector3(0, -0.06f, 0);
+            hullLower.transform.localScale = new Vector3(0.48f * scaleMultiplier, 0.08f, 0.28f * scaleMultiplier);
+            hullLower.transform.localRotation = Quaternion.identity;
+            SetMaterialColor(hullLower, darkWood);
+
+            // 1b. Create Deck Surface (lighter wood on top)
+            Color deckWood = new Color(0.5f, 0.32f, 0.15f); // Lighter wood for deck
+            GameObject deck = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            deck.name = "Deck";
+            deck.transform.SetParent(parent.transform);
+            deck.transform.localPosition = new Vector3(0, 0.09f, 0);
+            deck.transform.localScale = new Vector3(0.45f * scaleMultiplier, 0.02f, 0.28f * scaleMultiplier);
+            deck.transform.localRotation = Quaternion.identity;
+            SetMaterialColor(deck, deckWood);
+
+            // 1c. Add Side Railings (left and right)
+            Color railingWood = new Color(0.35f, 0.22f, 0.08f); // Medium brown for railings
+            // Left railing
+            GameObject railingLeft = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            railingLeft.name = "RailingLeft";
+            railingLeft.transform.SetParent(parent.transform);
+            railingLeft.transform.localPosition = new Vector3(-0.24f * scaleMultiplier, 0.12f, 0);
+            railingLeft.transform.localScale = new Vector3(0.03f, 0.08f, 0.28f * scaleMultiplier);
+            railingLeft.transform.localRotation = Quaternion.identity;
+            SetMaterialColor(railingLeft, railingWood);
+
+            // Right railing
+            GameObject railingRight = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            railingRight.name = "RailingRight";
+            railingRight.transform.SetParent(parent.transform);
+            railingRight.transform.localPosition = new Vector3(0.24f * scaleMultiplier, 0.12f, 0);
+            railingRight.transform.localScale = new Vector3(0.03f, 0.08f, 0.28f * scaleMultiplier);
+            railingRight.transform.localRotation = Quaternion.identity;
+            SetMaterialColor(railingRight, railingWood);
+
+            // 2. Create Bow (front pointed part) - main prow
             GameObject bow = GameObject.CreatePrimitive(PrimitiveType.Cube);
             bow.name = "Bow";
             bow.transform.SetParent(parent.transform);
@@ -152,6 +192,24 @@ namespace PlunkAndPlunder.Rendering
             bow.transform.localScale = new Vector3(0.2f * scaleMultiplier, 0.12f, 0.2f * scaleMultiplier);
             bow.transform.localRotation = Quaternion.Euler(0, 45, 0);
             SetMaterialColor(bow, brownHull);
+
+            // 2a. Add Prow Detail (decorative front piece)
+            GameObject prow = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            prow.name = "Prow";
+            prow.transform.SetParent(parent.transform);
+            prow.transform.localPosition = new Vector3(0.42f * scaleMultiplier, 0.05f, 0);
+            prow.transform.localScale = new Vector3(0.12f * scaleMultiplier, 0.06f, 0.08f * scaleMultiplier);
+            prow.transform.localRotation = Quaternion.Euler(0, 45, 0);
+            SetMaterialColor(prow, deckWood);
+
+            // 2b. Add Stern (back of ship)
+            GameObject stern = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            stern.name = "Stern";
+            stern.transform.SetParent(parent.transform);
+            stern.transform.localPosition = new Vector3(-0.28f * scaleMultiplier, 0.03f, 0);
+            stern.transform.localScale = new Vector3(0.1f * scaleMultiplier, 0.18f, 0.26f * scaleMultiplier);
+            stern.transform.localRotation = Quaternion.identity;
+            SetMaterialColor(stern, darkWood);
 
             // 3. Create Mast(s) - number depends on health tier, visual depends on sail tier
             if (healthTier == 1)
@@ -199,81 +257,197 @@ namespace PlunkAndPlunder.Rendering
             mast.transform.localScale = new Vector3(0.04f, mastHeight, 0.04f);
             SetMaterialColor(mast, mastColor);
 
-            // Sail - size and shape varies by tier
-            GameObject sail = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            sail.name = "Sail";
-            sail.transform.SetParent(parent.transform);
-            sail.transform.localPosition = position;
+            // Add crow's nest platform at 70% height
+            GameObject crowsNest = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            crowsNest.name = "CrowsNest";
+            crowsNest.transform.SetParent(parent.transform);
+            crowsNest.transform.localPosition = position + new Vector3(0, mastHeight * 0.7f, 0);
+            crowsNest.transform.localScale = new Vector3(0.08f, 0.02f, 0.08f);
+            SetMaterialColor(crowsNest, mastColor);
 
-            // Tier-based sail dimensions
+            // Tier-based sail dimensions and billowing effect
+            float sailWidth, sailHeight, sailBillowDepth;
+            int sailSegments; // Number of curved sail segments
+
             switch (sailTier)
             {
                 case 1: // Small square sails (0-1 sail upgrades)
-                    sail.transform.localScale = new Vector3(0.3f * scale, 0.35f, 0.05f);
+                    sailWidth = 0.3f * scale;
+                    sailHeight = 0.35f;
+                    sailBillowDepth = 0.04f;
+                    sailSegments = 2;
                     break;
-                case 2: // Larger triangular-style sails (2-3 sail upgrades)
-                    sail.transform.localScale = new Vector3(0.4f * scale, 0.5f, 0.06f);
-                    // Make sail slightly transparent for "billowing" effect
+                case 2: // Larger billowing sails (2-3 sail upgrades)
+                    sailWidth = 0.4f * scale;
+                    sailHeight = 0.5f;
+                    sailBillowDepth = 0.06f;
+                    sailSegments = 3;
                     break;
                 case 3: // Massive billowing sails (4-5 sail upgrades)
-                    sail.transform.localScale = new Vector3(0.5f * scale, 0.65f, 0.08f);
-                    // Add secondary sail layer for depth
-                    GameObject sailLayer2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    sailLayer2.name = "Sail_Layer2";
-                    sailLayer2.transform.SetParent(parent.transform);
-                    sailLayer2.transform.localPosition = position + new Vector3(0, 0, -0.06f);
-                    sailLayer2.transform.localScale = new Vector3(0.45f * scale, 0.6f, 0.06f);
-                    Color layer2Color = new Color(sailColor.r * 0.9f, sailColor.g * 0.9f, sailColor.b * 0.9f, 0.8f);
-                    SetMaterialColor(sailLayer2, layer2Color);
+                    sailWidth = 0.5f * scale;
+                    sailHeight = 0.65f;
+                    sailBillowDepth = 0.08f;
+                    sailSegments = 3;
+                    break;
+                default:
+                    sailWidth = 0.3f * scale;
+                    sailHeight = 0.35f;
+                    sailBillowDepth = 0.04f;
+                    sailSegments = 2;
                     break;
             }
-            SetMaterialColor(sail, sailColor);
 
-            // Flag at top
-            GameObject flag = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            flag.name = "Flag";
-            flag.transform.SetParent(parent.transform);
-            flag.transform.localPosition = position + new Vector3(0, mastHeight + 0.25f, 0);
-            flag.transform.localScale = new Vector3(0.08f, 0.06f, 0.02f);
-            SetMaterialColor(flag, flagColor);
+            // Create billowing sail using multiple angled segments to simulate wind curve
+            for (int i = 0; i < sailSegments; i++)
+            {
+                GameObject sailSegment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                sailSegment.name = $"Sail_Segment_{i}";
+                sailSegment.transform.SetParent(parent.transform);
 
-            // Flag pole
+                // Position segments vertically and curve them forward
+                float segmentHeight = sailHeight / sailSegments;
+                float yOffset = position.y + (i * segmentHeight) - (sailHeight / 2f) + (segmentHeight / 2f);
+
+                // Curve each segment progressively forward and rotate for billowing effect
+                float curveFactor = (float)i / (sailSegments - 1); // 0 to 1
+                float zOffset = position.z - (curveFactor * sailBillowDepth);
+                float rotation = curveFactor * 5f; // Slight rotation for wind effect
+
+                sailSegment.transform.localPosition = new Vector3(position.x, yOffset, zOffset);
+                sailSegment.transform.localRotation = Quaternion.Euler(rotation, 0, 0);
+                sailSegment.transform.localScale = new Vector3(sailWidth, segmentHeight * 1.05f, 0.02f);
+
+                // Gradient color for depth - darker at bottom, lighter at top
+                float brightnessMultiplier = 0.85f + (curveFactor * 0.15f);
+                Color segmentColor = new Color(
+                    sailColor.r * brightnessMultiplier,
+                    sailColor.g * brightnessMultiplier,
+                    sailColor.b * brightnessMultiplier,
+                    sailColor.a
+                );
+                SetMaterialColor(sailSegment, segmentColor);
+            }
+
+            // Add horizontal spar (crossbeam) at top of sail for rigging
+            GameObject topSpar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            topSpar.name = "TopSpar";
+            topSpar.transform.SetParent(parent.transform);
+            topSpar.transform.localPosition = position + new Vector3(0, sailHeight / 2f, -sailBillowDepth * 0.3f);
+            topSpar.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            topSpar.transform.localScale = new Vector3(0.02f, sailWidth * 0.6f, 0.02f);
+            SetMaterialColor(topSpar, mastColor);
+
+            // Add horizontal spar at bottom of sail
+            GameObject bottomSpar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            bottomSpar.name = "BottomSpar";
+            bottomSpar.transform.SetParent(parent.transform);
+            bottomSpar.transform.localPosition = position + new Vector3(0, -sailHeight / 2f, -sailBillowDepth * 0.7f);
+            bottomSpar.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            bottomSpar.transform.localScale = new Vector3(0.02f, sailWidth * 0.6f, 0.02f);
+            SetMaterialColor(bottomSpar, mastColor);
+
+            // For tier 3, add a second smaller sail above for double-sail effect
+            if (sailTier == 3)
+            {
+                float topSailHeight = sailHeight * 0.4f;
+                float topSailWidth = sailWidth * 0.7f;
+
+                GameObject topSail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                topSail.name = "TopSail";
+                topSail.transform.SetParent(parent.transform);
+                topSail.transform.localPosition = position + new Vector3(0, sailHeight * 0.7f, -sailBillowDepth * 0.5f);
+                topSail.transform.localRotation = Quaternion.Euler(8, 0, 0);
+                topSail.transform.localScale = new Vector3(topSailWidth, topSailHeight, 0.02f);
+                Color topSailColor = new Color(sailColor.r * 0.95f, sailColor.g * 0.95f, sailColor.b * 0.95f);
+                SetMaterialColor(topSail, topSailColor);
+            }
+
+            // Create triangular flag at top of mast
             GameObject flagPole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             flagPole.name = "FlagPole";
             flagPole.transform.SetParent(parent.transform);
-            flagPole.transform.localPosition = position + new Vector3(0, mastHeight + 0.2f, 0);
-            flagPole.transform.localScale = new Vector3(0.02f, 0.08f, 0.02f);
+            flagPole.transform.localPosition = position + new Vector3(0, mastHeight + 0.15f, 0);
+            flagPole.transform.localScale = new Vector3(0.02f, 0.1f, 0.02f);
             SetMaterialColor(flagPole, mastColor);
+
+            // Triangular flag made from rotated cube (simulating pennant flag)
+            GameObject flag = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            flag.name = "Flag";
+            flag.transform.SetParent(parent.transform);
+            flag.transform.localPosition = position + new Vector3(0.06f, mastHeight + 0.22f, 0);
+            flag.transform.localRotation = Quaternion.Euler(0, 0, 45); // Rotate to look triangular
+            flag.transform.localScale = new Vector3(0.12f, 0.08f, 0.01f);
+            SetMaterialColor(flag, flagColor);
+
+            // Add decorative flag streamer for motion effect
+            GameObject flagStreamer = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            flagStreamer.name = "FlagStreamer";
+            flagStreamer.transform.SetParent(parent.transform);
+            flagStreamer.transform.localPosition = position + new Vector3(0.10f, mastHeight + 0.20f, 0);
+            flagStreamer.transform.localRotation = Quaternion.Euler(0, 0, -10); // Angle for wind effect
+            flagStreamer.transform.localScale = new Vector3(0.08f, 0.02f, 0.01f);
+            Color streamerColor = new Color(flagColor.r * 0.9f, flagColor.g * 0.9f, flagColor.b * 0.9f);
+            SetMaterialColor(flagStreamer, streamerColor);
         }
 
         private void CreateCannons(GameObject parent, int count, float scale, Color cannonColor)
         {
-            // Create small dark cylinders protruding from sides as cannons
+            // Enhanced cannon design with barrel, muzzle, and mount
             float spacing = 0.3f * scale / Mathf.Max(1, count - 1);
             float startZ = -0.15f * scale;
+
+            // Define cannon colors
+            Color ironBarrel = new Color(0.2f, 0.2f, 0.22f); // Dark gray iron
+            Color muzzleInterior = new Color(0.08f, 0.08f, 0.08f); // Almost black interior
+            Color woodMount = cannonColor; // Use the dark hull color for mount
 
             for (int i = 0; i < count; i++)
             {
                 float zPos = startZ + (i * spacing);
 
-                // Left side cannon
-                GameObject cannonLeft = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                cannonLeft.name = $"Cannon_L_{i}";
-                cannonLeft.transform.SetParent(parent.transform);
-                cannonLeft.transform.localPosition = new Vector3(-0.25f * scale, 0.05f, zPos);
-                cannonLeft.transform.localRotation = Quaternion.Euler(0, 0, 90); // Rotate to point sideways
-                cannonLeft.transform.localScale = new Vector3(0.03f, 0.08f, 0.03f);
-                SetMaterialColor(cannonLeft, cannonColor);
+                // Create left side cannon assembly
+                CreateCannonAssembly(parent, new Vector3(-0.28f * scale, 0.05f, zPos), -90f, scale,
+                    ironBarrel, muzzleInterior, woodMount, $"L_{i}");
 
-                // Right side cannon
-                GameObject cannonRight = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                cannonRight.name = $"Cannon_R_{i}";
-                cannonRight.transform.SetParent(parent.transform);
-                cannonRight.transform.localPosition = new Vector3(0.25f * scale, 0.05f, zPos);
-                cannonRight.transform.localRotation = Quaternion.Euler(0, 0, 90);
-                cannonRight.transform.localScale = new Vector3(0.03f, 0.08f, 0.03f);
-                SetMaterialColor(cannonRight, cannonColor);
+                // Create right side cannon assembly
+                CreateCannonAssembly(parent, new Vector3(0.28f * scale, 0.05f, zPos), 90f, scale,
+                    ironBarrel, muzzleInterior, woodMount, $"R_{i}");
             }
+        }
+
+        private void CreateCannonAssembly(GameObject parent, Vector3 position, float yRotation, float scale,
+            Color barrelColor, Color muzzleColor, Color mountColor, string suffix)
+        {
+            // 1. Cannon Mount/Carriage (wooden base connecting to hull)
+            GameObject mount = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mount.name = $"CannonMount_{suffix}";
+            mount.transform.SetParent(parent.transform);
+            mount.transform.localPosition = position;
+            mount.transform.localRotation = Quaternion.Euler(-5, yRotation, 0); // Angled slightly down
+            mount.transform.localScale = new Vector3(0.04f, 0.03f, 0.05f);
+            SetMaterialColor(mount, mountColor);
+
+            // 2. Cannon Barrel (thicker, more prominent iron cylinder)
+            GameObject barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            barrel.name = $"CannonBarrel_{suffix}";
+            barrel.transform.SetParent(parent.transform);
+            // Position barrel protruding outward from mount
+            Vector3 barrelOffset = yRotation > 0 ? new Vector3(0.06f, 0, 0) : new Vector3(-0.06f, 0, 0);
+            barrel.transform.localPosition = position + barrelOffset;
+            barrel.transform.localRotation = Quaternion.Euler(-5, 0, 90); // Horizontal and angled down
+            barrel.transform.localScale = new Vector3(0.045f, 0.12f, 0.045f); // Thicker and longer
+            SetMaterialColor(barrel, barrelColor);
+
+            // 3. Muzzle Detail (darker interior ring at end of barrel)
+            GameObject muzzle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            muzzle.name = $"CannonMuzzle_{suffix}";
+            muzzle.transform.SetParent(parent.transform);
+            // Position at the end of the barrel
+            Vector3 muzzleOffset = yRotation > 0 ? new Vector3(0.12f, 0, 0) : new Vector3(-0.12f, 0, 0);
+            muzzle.transform.localPosition = position + muzzleOffset;
+            muzzle.transform.localRotation = Quaternion.Euler(-5, 0, 90);
+            muzzle.transform.localScale = new Vector3(0.035f, 0.015f, 0.035f); // Thin ring
+            SetMaterialColor(muzzle, muzzleColor);
         }
 
         private void CreateExtraFlags(GameObject parent, int count, float scale, Color flagColor)
@@ -610,8 +784,22 @@ namespace PlunkAndPlunder.Rendering
 
         private void UpdateHealthBar(Unit unit)
         {
+            // Check if health bar exists and is still valid
             if (healthBars.TryGetValue(unit.id, out GameObject healthBarContainer))
             {
+                // Check if the GameObject was destroyed (happens during ship upgrade)
+                if (healthBarContainer == null)
+                {
+                    // Health bar was destroyed, remove from dictionary and recreate
+                    healthBars.Remove(unit.id);
+
+                    if (unitObjects.TryGetValue(unit.id, out GameObject unitObj))
+                    {
+                        CreateHealthBar(unit, unitObj);
+                    }
+                    return;
+                }
+
                 Transform foreground = healthBarContainer.transform.Find("HealthBarFG");
                 if (foreground != null)
                 {
@@ -634,6 +822,14 @@ namespace PlunkAndPlunder.Rendering
 
                     // Hide health bar if at full health
                     healthBarContainer.SetActive(unit.health < unit.maxHealth);
+                }
+            }
+            else
+            {
+                // Health bar doesn't exist, create it
+                if (unitObjects.TryGetValue(unit.id, out GameObject unitObj))
+                {
+                    CreateHealthBar(unit, unitObj);
                 }
             }
         }

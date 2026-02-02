@@ -517,5 +517,281 @@ namespace PlunkAndPlunder.Orders
 
             return true;
         }
+
+        public bool ValidateUpgradeSailsOrder(UpgradeSailsOrder order, out string error)
+        {
+            error = null;
+
+            // Check unit exists
+            Unit unit = unitManager.GetUnit(order.unitId);
+            if (unit == null)
+            {
+                error = "Unit does not exist";
+                return false;
+            }
+
+            // Check ownership
+            if (unit.ownerId != order.playerId)
+            {
+                error = "Player does not own this unit";
+                return false;
+            }
+
+            // Check unit is a ship
+            if (unit.type != UnitType.SHIP)
+            {
+                error = "Only ships can be upgraded";
+                return false;
+            }
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check shipyard exists
+            Structure shipyard = structureManager.GetStructure(order.shipyardId);
+            if (shipyard == null)
+            {
+                error = "Shipyard does not exist";
+                return false;
+            }
+
+            // Check shipyard type
+            if (shipyard.type != StructureType.SHIPYARD)
+            {
+                error = "Structure is not a shipyard";
+                return false;
+            }
+
+            // Check shipyard ownership
+            if (shipyard.ownerId != order.playerId)
+            {
+                error = "Player does not own this shipyard";
+                return false;
+            }
+
+            // Check unit is at shipyard location
+            if (!unit.position.Equals(shipyard.position))
+            {
+                error = "Unit must be at shipyard location to upgrade";
+                return false;
+            }
+
+            // Check unit is not already at max sails
+            if (unit.sails >= BuildingConfig.MAX_SAILS_UPGRADES)
+            {
+                error = "Ship already has maximum sails upgrades";
+                return false;
+            }
+
+            // Check player has enough currency
+            if (playerManager == null)
+            {
+                error = "Player manager not available";
+                return false;
+            }
+
+            Player player = playerManager.GetPlayer(order.playerId);
+            if (player == null)
+            {
+                error = "Player does not exist";
+                return false;
+            }
+
+            if (player.gold < BuildingConfig.UPGRADE_SAILS_COST)
+            {
+                error = $"Not enough gold. Need {BuildingConfig.UPGRADE_SAILS_COST}, have {player.gold}";
+                return false;
+            }
+
+            return true;
+        }
+
+        public bool ValidateUpgradeCannonsOrder(UpgradeCannonsOrder order, out string error)
+        {
+            error = null;
+
+            // Check unit exists
+            Unit unit = unitManager.GetUnit(order.unitId);
+            if (unit == null)
+            {
+                error = "Unit does not exist";
+                return false;
+            }
+
+            // Check ownership
+            if (unit.ownerId != order.playerId)
+            {
+                error = "Player does not own this unit";
+                return false;
+            }
+
+            // Check unit is a ship
+            if (unit.type != UnitType.SHIP)
+            {
+                error = "Only ships can be upgraded";
+                return false;
+            }
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check shipyard exists
+            Structure shipyard = structureManager.GetStructure(order.shipyardId);
+            if (shipyard == null)
+            {
+                error = "Shipyard does not exist";
+                return false;
+            }
+
+            // Check shipyard type
+            if (shipyard.type != StructureType.SHIPYARD)
+            {
+                error = "Structure is not a shipyard";
+                return false;
+            }
+
+            // Check shipyard ownership
+            if (shipyard.ownerId != order.playerId)
+            {
+                error = "Player does not own this shipyard";
+                return false;
+            }
+
+            // Check unit is at shipyard location
+            if (!unit.position.Equals(shipyard.position))
+            {
+                error = "Unit must be at shipyard location to upgrade";
+                return false;
+            }
+
+            // Check unit is not already at max cannons
+            if (unit.cannons >= BuildingConfig.MAX_CANNONS_UPGRADES)
+            {
+                error = "Ship already has maximum cannons upgrades";
+                return false;
+            }
+
+            // Check player has enough currency
+            if (playerManager == null)
+            {
+                error = "Player manager not available";
+                return false;
+            }
+
+            Player player = playerManager.GetPlayer(order.playerId);
+            if (player == null)
+            {
+                error = "Player does not exist";
+                return false;
+            }
+
+            if (player.gold < BuildingConfig.UPGRADE_CANNONS_COST)
+            {
+                error = $"Not enough gold. Need {BuildingConfig.UPGRADE_CANNONS_COST}, have {player.gold}";
+                return false;
+            }
+
+            return true;
+        }
+
+        public bool ValidateUpgradeMaxLifeOrder(UpgradeMaxLifeOrder order, out string error)
+        {
+            error = null;
+
+            // Check unit exists
+            Unit unit = unitManager.GetUnit(order.unitId);
+            if (unit == null)
+            {
+                error = "Unit does not exist";
+                return false;
+            }
+
+            // Check ownership
+            if (unit.ownerId != order.playerId)
+            {
+                error = "Player does not own this unit";
+                return false;
+            }
+
+            // Check unit is a ship
+            if (unit.type != UnitType.SHIP)
+            {
+                error = "Only ships can be upgraded";
+                return false;
+            }
+
+            // Check structure manager is available
+            if (structureManager == null)
+            {
+                error = "Structure manager not available";
+                return false;
+            }
+
+            // Check shipyard exists
+            Structure shipyard = structureManager.GetStructure(order.shipyardId);
+            if (shipyard == null)
+            {
+                error = "Shipyard does not exist";
+                return false;
+            }
+
+            // Check shipyard type
+            if (shipyard.type != StructureType.SHIPYARD)
+            {
+                error = "Structure is not a shipyard";
+                return false;
+            }
+
+            // Check shipyard ownership
+            if (shipyard.ownerId != order.playerId)
+            {
+                error = "Player does not own this shipyard";
+                return false;
+            }
+
+            // Check unit is at shipyard location
+            if (!unit.position.Equals(shipyard.position))
+            {
+                error = "Unit must be at shipyard location to upgrade";
+                return false;
+            }
+
+            // Check unit is not already at max tier
+            if (unit.maxHealth >= BuildingConfig.MAX_SHIP_TIER)
+            {
+                error = "Ship is already at maximum tier";
+                return false;
+            }
+
+            // Check player has enough currency
+            if (playerManager == null)
+            {
+                error = "Player manager not available";
+                return false;
+            }
+
+            Player player = playerManager.GetPlayer(order.playerId);
+            if (player == null)
+            {
+                error = "Player does not exist";
+                return false;
+            }
+
+            if (player.gold < BuildingConfig.UPGRADE_MAX_LIFE_COST)
+            {
+                error = $"Not enough gold. Need {BuildingConfig.UPGRADE_MAX_LIFE_COST}, have {player.gold}";
+                return false;
+            }
+
+            return true;
+        }
     }
 }

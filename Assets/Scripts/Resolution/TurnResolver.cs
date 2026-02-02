@@ -1561,8 +1561,12 @@ namespace PlunkAndPlunder.Resolution
         {
             List<GameEvent> events = new List<GameEvent>();
 
+            Debug.Log($"⚙️ [TurnResolver] ========== ResolveUpgradeSailsOrders called with {orders.Count} orders ==========");
+
             foreach (UpgradeSailsOrder order in orders)
             {
+                Debug.Log($"[TurnResolver] Processing UpgradeSailsOrder: unitId={order.unitId}, playerId={order.playerId}, shipyardId={order.shipyardId}");
+
                 Unit ship = unitManager.GetUnit(order.unitId);
                 if (ship == null)
                 {
@@ -1641,6 +1645,8 @@ namespace PlunkAndPlunder.Resolution
                 int oldSails = ship.sails;
                 ship.sails++;
 
+                Debug.Log($"✅ [TurnResolver] UPGRADE APPLIED! Ship {order.unitId} sails: {oldSails} → {ship.sails}");
+
                 events.Add(new GameEvent(turnNumber, GameEventType.ShipUpgraded,
                     $"Player {order.playerId} upgraded sails on ship {order.unitId} (Level {ship.sails})"));
 
@@ -1657,8 +1663,12 @@ namespace PlunkAndPlunder.Resolution
         {
             List<GameEvent> events = new List<GameEvent>();
 
+            Debug.Log($"⚙️ [TurnResolver] ========== ResolveUpgradeCannonsOrders called with {orders.Count} orders ==========");
+
             foreach (UpgradeCannonsOrder order in orders)
             {
+                Debug.Log($"[TurnResolver] Processing UpgradeCannonsOrder: unitId={order.unitId}, playerId={order.playerId}");
+
                 Unit ship = unitManager.GetUnit(order.unitId);
                 if (ship == null)
                 {
@@ -1736,6 +1746,8 @@ namespace PlunkAndPlunder.Resolution
                 // Upgrade cannons
                 int oldCannons = ship.cannons;
                 ship.cannons++;
+
+                Debug.Log($"✅ [TurnResolver] UPGRADE APPLIED! Ship {order.unitId} cannons: {oldCannons} → {ship.cannons}");
 
                 events.Add(new GameEvent(turnNumber, GameEventType.ShipUpgraded,
                     $"Player {order.playerId} upgraded cannons on ship {order.unitId} (Level {ship.cannons})"));

@@ -20,9 +20,6 @@ namespace PlunkAndPlunder.UI
     /// </summary>
     public class LeftPanelHUD : MonoBehaviour
     {
-        // References
-        private GameState gameState;
-
         // Section containers
         private GameObject playerStatsSection;
         private GameObject unitDetailsSection;
@@ -41,27 +38,29 @@ namespace PlunkAndPlunder.UI
 
         public void Initialize(GameState state)
         {
-            gameState = state;
+            // Don't store gameState - it gets replaced when starting a new game
+            // Instead, get it fresh from GameManager each time
             BuildLeftPanel();
         }
 
         private void BuildLeftPanel()
         {
-            // Setup RectTransform for bottom-left positioning
+            // Setup RectTransform for bottom-left positioning (aligned with plan)
             RectTransform rectTransform = gameObject.GetComponent<RectTransform>();
             if (rectTransform == null)
             {
                 rectTransform = gameObject.AddComponent<RectTransform>();
             }
 
-            // CRITICAL: Anchor to BOTTOM-LEFT
+            // ANCHOR TO BOTTOM-LEFT (per plan spec)
             rectTransform.anchorMin = new Vector2(0f, 0f);
             rectTransform.anchorMax = new Vector2(0f, 0f);
             rectTransform.pivot = new Vector2(0f, 0f);
             rectTransform.anchoredPosition = new Vector2(HUDStyles.EdgeMargin, HUDStyles.EdgeMargin);
 
-            float height = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
-            rectTransform.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, height);
+            // Calculate height: screen height - top bar - 2*edge margin
+            float panelHeight = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
+            rectTransform.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, panelHeight);
 
             // Add background
             Image bg = gameObject.GetComponent<Image>();
@@ -84,18 +83,16 @@ namespace PlunkAndPlunder.UI
             layoutGroup.padding = new RectOffset(HUDStyles.PanelPadding, HUDStyles.PanelPadding,
                                                   HUDStyles.PanelPadding, HUDStyles.PanelPadding);
 
-            // Build sections (without action buttons)
+            // Build sections in order: Player Stats → Selection Details → Build Queue → Actions (per plan)
             BuildPlayerStatsSection();
             BuildUnitDetailsSection();
             BuildBuildQueueSection();
+            BuildActionButtonsSection();
 
             // Initially hide build queue
             buildQueueSection.SetActive(false);
 
-            // Build action buttons as SEPARATE panel above the main panel
-            BuildActionButtonsSeparate();
-
-            Debug.Log($"[LeftPanelHUD] Initialized at bottom-left: position={rectTransform.anchoredPosition}, size={rectTransform.sizeDelta}");
+            Debug.Log($"[LeftPanelHUD] Initialized at bottom-left: anchor={rectTransform.anchorMin}, position={rectTransform.anchoredPosition}, size={rectTransform.sizeDelta}");
         }
 
         #region Player Stats Section
@@ -133,7 +130,10 @@ namespace PlunkAndPlunder.UI
 
         public void UpdatePlayerStats()
         {
-            if (playerStatsText == null || gameState == null) return;
+            if (playerStatsText == null) return;
+
+            GameState gameState = GameManager.Instance?.state;
+            if (gameState == null) return;
 
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             List<Player> players = gameState.playerManager.GetActivePlayers();
@@ -200,7 +200,10 @@ namespace PlunkAndPlunder.UI
             selectedUnit = unit;
             selectedStructure = structure;
 
-            if (unitDetailsText == null || gameState == null) return;
+            if (unitDetailsText == null) return;
+
+            GameState gameState = GameManager.Instance?.state;
+            if (gameState == null) return;
 
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
 
@@ -327,33 +330,14 @@ namespace PlunkAndPlunder.UI
 
         #region Action Buttons Section
 
-        private void BuildActionButtonsSeparate()
+        private void BuildActionButtonsSection()
         {
-            // Create as SIBLING to main panel, positioned ABOVE it
-            actionButtonsSection = new GameObject("ActionButtonsPanel", typeof(RectTransform));
-            actionButtonsSection.transform.SetParent(transform.parent, false); // Same parent as LeftPanelHUD
+            // Create as CHILD of main panel (at top due to being called first)
+            actionButtonsSection = new GameObject("ActionButtonsSection", typeof(RectTransform));
+            actionButtonsSection.transform.SetParent(transform, false);
 
             RectTransform rt = actionButtonsSection.GetComponent<RectTransform>();
-
-            // Anchor to BOTTOM-LEFT, just like main panel
-            rt.anchorMin = new Vector2(0f, 0f);
-            rt.anchorMax = new Vector2(0f, 0f);
-            rt.pivot = new Vector2(0f, 0f);
-
-            // Position ABOVE the main panel
-            float mainPanelHeight = Screen.height - HUDStyles.TopBarHeight - (HUDStyles.EdgeMargin * 2);
-            float yOffset = HUDStyles.EdgeMargin + mainPanelHeight + 10; // 10px gap above main panel
-            rt.anchoredPosition = new Vector2(HUDStyles.EdgeMargin, yOffset);
-            rt.sizeDelta = new Vector2(HUDStyles.LeftPanelWidth, 250); // Fixed size
-
-            // Add background
-            Image bg = actionButtonsSection.AddComponent<Image>();
-            bg.color = HUDStyles.BackgroundColor;
-
-            // Add border
-            Outline outline = actionButtonsSection.AddComponent<Outline>();
-            outline.effectColor = HUDStyles.BorderColor;
-            outline.effectDistance = new Vector2(2, -2);
+            rt.sizeDelta = new Vector2(0, 340); // Fixed height - fits all 5 buttons properly
 
             // Layout
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
@@ -362,6 +346,14 @@ namespace PlunkAndPlunder.UI
             layout.childControlWidth = true;
             layout.spacing = HUDStyles.ButtonSpacing;
             layout.padding = new RectOffset(5, 5, 5, 5);
+
+            // Header
+            GameObject header = HUDLayoutManager.CreateHeaderText(actionButtonsSection.transform, "ACTIONS");
+            RectTransform headerRT = header.GetComponent<RectTransform>();
+            headerRT.sizeDelta = new Vector2(0, 30);
+
+            // Separator
+            CreateSeparatorLine(actionButtonsSection.transform);
 
             // Create action buttons
             CreateActionButton("DeployShipyard", "Deploy Shipyard (100g)", OnDeployShipyard);
@@ -381,11 +373,13 @@ namespace PlunkAndPlunder.UI
             RectTransform rt = buttonObj.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, HUDStyles.ButtonHeight);
 
-            Button button = buttonObj.AddComponent<Button>();
-            button.onClick.AddListener(onClick);
-
             Image bg = buttonObj.AddComponent<Image>();
             bg.color = HUDStyles.ButtonNormalColor;
+            bg.raycastTarget = true; // CRITICAL: Enable raycasting for clicks
+
+            Button button = buttonObj.AddComponent<Button>();
+            button.targetGraphic = bg; // CRITICAL: Set target graphic for button
+            button.onClick.AddListener(onClick);
 
             ColorBlock colors = button.colors;
             colors.normalColor = HUDStyles.ButtonNormalColor;
@@ -413,61 +407,95 @@ namespace PlunkAndPlunder.UI
 
         private void UpdateActionButtons()
         {
+            GameState gameState = GameManager.Instance?.state;
+
             if (gameState == null || gameState.phase != GamePhase.Planning)
             {
-                // Disable all buttons if not in planning phase
+                // Hide all buttons if not in planning phase
                 foreach (var btn in actionButtons.Values)
                 {
-                    btn.interactable = false;
+                    btn.gameObject.SetActive(false);
                 }
                 return;
             }
 
             Player humanPlayer = gameState.playerManager.GetPlayer(0);
-            if (humanPlayer == null) return;
+            if (humanPlayer == null)
+            {
+                return;
+            }
 
-            // Deploy Shipyard - available on harbor tiles with units
+            // Deploy Shipyard - only show if ship is on empty harbor tile
+            bool showDeployShipyard = false;
             bool canDeployShipyard = false;
             if (selectedUnit != null && selectedUnit.ownerId == 0)
             {
                 Tile tile = gameState.grid.GetTile(selectedUnit.position);
-                canDeployShipyard = tile != null &&
-                                   tile.type == TileType.HARBOR &&
-                                   gameState.structureManager.GetStructureAtPosition(selectedUnit.position) == null &&
-                                   humanPlayer.gold >= BuildingConfig.DEPLOY_SHIPYARD_COST;
+                if (tile != null && tile.type == TileType.HARBOR &&
+                    gameState.structureManager.GetStructureAtPosition(selectedUnit.position) == null)
+                {
+                    showDeployShipyard = true;
+                    canDeployShipyard = humanPlayer.gold >= BuildingConfig.DEPLOY_SHIPYARD_COST;
+                }
             }
-            actionButtons["DeployShipyard"].interactable = canDeployShipyard;
+            actionButtons["DeployShipyard"].gameObject.SetActive(showDeployShipyard);
+            if (showDeployShipyard)
+            {
+                actionButtons["DeployShipyard"].interactable = canDeployShipyard;
+            }
 
-            // Build Ship - available on owned shipyards
+            // Build Ship - only show if shipyard is selected
+            bool showBuildShip = false;
             bool canBuildShip = false;
             if (selectedStructure != null &&
                 selectedStructure.type == StructureType.SHIPYARD &&
                 selectedStructure.ownerId == 0)
             {
-                canBuildShip = selectedStructure.buildQueue.Count < BuildingConfig.MAX_QUEUE_SIZE &&
+                showBuildShip = true;
+                var queue = PlunkAndPlunder.Construction.ConstructionManager.Instance?.GetShipyardQueue(selectedStructure.id);
+                int queueCount = queue?.Count ?? 0;
+                canBuildShip = queueCount < BuildingConfig.MAX_QUEUE_SIZE &&
                               humanPlayer.gold >= BuildingConfig.BUILD_SHIP_COST;
             }
-            actionButtons["BuildShip"].interactable = canBuildShip;
+            actionButtons["BuildShip"].gameObject.SetActive(showBuildShip);
+            if (showBuildShip)
+            {
+                actionButtons["BuildShip"].interactable = canBuildShip;
+            }
 
-            // Upgrade buttons - available on owned units at shipyards
-            bool canUpgrade = false;
+            // Upgrade buttons - only show if ship is at friendly shipyard
+            bool showUpgrades = false;
             if (selectedUnit != null && selectedUnit.ownerId == 0)
             {
                 Structure shipyard = gameState.structureManager.GetStructureAtPosition(selectedUnit.position);
-                canUpgrade = shipyard != null &&
-                            shipyard.type == StructureType.SHIPYARD &&
-                            shipyard.ownerId == 0;
+                showUpgrades = shipyard != null &&
+                              shipyard.type == StructureType.SHIPYARD &&
+                              shipyard.ownerId == 0;
             }
 
-            actionButtons["UpgradeSails"].interactable = canUpgrade &&
-                                                         selectedUnit.sails < BuildingConfig.MAX_SAILS_UPGRADES &&
-                                                         humanPlayer.gold >= BuildingConfig.UPGRADE_SAILS_COST;
-            actionButtons["UpgradeCannons"].interactable = canUpgrade &&
-                                                           selectedUnit.cannons < BuildingConfig.MAX_CANNONS_UPGRADES &&
-                                                           humanPlayer.gold >= BuildingConfig.UPGRADE_CANNONS_COST;
-            actionButtons["UpgradeMaxLife"].interactable = canUpgrade &&
-                                                           selectedUnit.maxHealth < BuildingConfig.MAX_SHIP_TIER &&
-                                                           humanPlayer.gold >= BuildingConfig.UPGRADE_MAX_LIFE_COST;
+            // Upgrade Sails - only show if at shipyard and not maxed
+            bool showUpgradeSails = showUpgrades && selectedUnit.sails < BuildingConfig.MAX_SAILS_UPGRADES;
+            actionButtons["UpgradeSails"].gameObject.SetActive(showUpgradeSails);
+            if (showUpgradeSails)
+            {
+                actionButtons["UpgradeSails"].interactable = humanPlayer.gold >= BuildingConfig.UPGRADE_SAILS_COST;
+            }
+
+            // Upgrade Cannons - only show if at shipyard and not maxed
+            bool showUpgradeCannons = showUpgrades && selectedUnit.cannons < BuildingConfig.MAX_CANNONS_UPGRADES;
+            actionButtons["UpgradeCannons"].gameObject.SetActive(showUpgradeCannons);
+            if (showUpgradeCannons)
+            {
+                actionButtons["UpgradeCannons"].interactable = humanPlayer.gold >= BuildingConfig.UPGRADE_CANNONS_COST;
+            }
+
+            // Upgrade Max Life - only show if at shipyard and not maxed
+            bool showUpgradeMaxLife = showUpgrades && selectedUnit.maxHealth < BuildingConfig.MAX_SHIP_TIER;
+            actionButtons["UpgradeMaxLife"].gameObject.SetActive(showUpgradeMaxLife);
+            if (showUpgradeMaxLife)
+            {
+                actionButtons["UpgradeMaxLife"].interactable = humanPlayer.gold >= BuildingConfig.UPGRADE_MAX_LIFE_COST;
+            }
         }
 
         #endregion
@@ -476,46 +504,72 @@ namespace PlunkAndPlunder.UI
 
         private void OnDeployShipyard()
         {
-            // Note: This should be handled by GameHUD/GameManager to create orders
-            Debug.Log("[LeftPanelHUD] Deploy Shipyard button clicked");
+            Debug.Log("🔘 [LeftPanelHUD] ========== DEPLOY SHIPYARD BUTTON CLICKED! ==========");
+
+            // Trigger deploy via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                Debug.Log("[LeftPanelHUD] Found GameHUD, sending message...");
+                gameHUD.SendMessage("OnDeployShipyardClicked", SendMessageOptions.DontRequireReceiver);
+            }
+            else
+            {
+                Debug.LogError("[LeftPanelHUD] GameHUD not found!");
+            }
         }
 
         private void OnBuildShip()
         {
-            if (selectedStructure != null && selectedStructure.type == StructureType.SHIPYARD)
+            Debug.Log("[LeftPanelHUD] Build Ship button clicked");
+
+            // Trigger build via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
             {
-                Player humanPlayer = gameState.playerManager.GetPlayer(0);
-                if (humanPlayer != null && humanPlayer.gold >= BuildingConfig.BUILD_SHIP_COST)
-                {
-                    // Immediately add to build queue
-                    BuildQueueItem item = new BuildQueueItem("Ship", BuildingConfig.SHIP_BUILD_TIME, BuildingConfig.BUILD_SHIP_COST);
-                    selectedStructure.buildQueue.Add(item);
-
-                    // Deduct gold
-                    humanPlayer.gold -= BuildingConfig.BUILD_SHIP_COST;
-
-                    // Refresh display
-                    UpdateSelection(selectedUnit, selectedStructure);
-                    UpdatePlayerStats();
-
-                    Debug.Log($"[LeftPanelHUD] Ship added to build queue at {selectedStructure.id}");
-                }
+                gameHUD.SendMessage("OnBuildShipClicked", SendMessageOptions.DontRequireReceiver);
             }
         }
 
         private void OnUpgradeSails()
         {
-            Debug.Log("[LeftPanelHUD] Upgrade Sails button clicked");
+            Debug.Log("[LeftPanelHUD] Upgrade Sails button clicked - finding GameHUD...");
+
+            // Trigger upgrade via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                Debug.Log("[LeftPanelHUD] GameHUD found, calling OnUpgradeSailsClicked");
+                gameHUD.SendMessage("OnUpgradeSailsClicked", SendMessageOptions.DontRequireReceiver);
+            }
+            else
+            {
+                Debug.LogError("[LeftPanelHUD] GameHUD not found!");
+            }
         }
 
         private void OnUpgradeCannons()
         {
             Debug.Log("[LeftPanelHUD] Upgrade Cannons button clicked");
+
+            // Trigger upgrade via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnUpgradeCannonsClicked", SendMessageOptions.DontRequireReceiver);
+            }
         }
 
         private void OnUpgradeMaxLife()
         {
             Debug.Log("[LeftPanelHUD] Upgrade Max Life button clicked");
+
+            // Trigger upgrade via GameHUD
+            GameHUD gameHUD = FindFirstObjectByType<GameHUD>();
+            if (gameHUD != null)
+            {
+                gameHUD.SendMessage("OnUpgradeMaxLifeClicked", SendMessageOptions.DontRequireReceiver);
+            }
         }
 
         #endregion
