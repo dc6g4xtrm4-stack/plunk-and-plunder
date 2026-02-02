@@ -207,12 +207,11 @@ namespace PlunkAndPlunder.UI
             viewportRT.anchorMin = Vector2.zero;
             viewportRT.anchorMax = Vector2.one;
             viewportRT.sizeDelta = Vector2.zero;
+            viewportRT.offsetMin = Vector2.zero;
+            viewportRT.offsetMax = Vector2.zero;
 
-            Image viewportMask = viewport.AddComponent<Image>();
-            viewportMask.color = Color.clear;
-
-            Mask mask = viewport.AddComponent<Mask>();
-            mask.showMaskGraphic = false;
+            // Use RectMask2D instead of Mask - simpler and doesn't require Image/sprite
+            RectMask2D rectMask = viewport.AddComponent<RectMask2D>();
 
             scrollRect.viewport = viewportRT;
 
@@ -347,73 +346,48 @@ namespace PlunkAndPlunder.UI
 
             // Layout element for proper sizing in parent's VerticalLayoutGroup
             LayoutElement entryLayoutElement = entryObj.AddComponent<LayoutElement>();
-            entryLayoutElement.minHeight = 70;
-            entryLayoutElement.preferredHeight = 70;
+            entryLayoutElement.minHeight = 80;
+            entryLayoutElement.preferredHeight = 80;
 
-            // Layout group for stacking text - DISABLED, use manual positioning instead
-            // VerticalLayoutGroup causes positioning issues, use simple stacking
+            // Use VerticalLayoutGroup like left panel does
+            VerticalLayoutGroup entryLayout = entryObj.AddComponent<VerticalLayoutGroup>();
+            entryLayout.childAlignment = TextAnchor.UpperLeft;
+            entryLayout.childControlHeight = false;
+            entryLayout.childControlWidth = false;
+            entryLayout.childForceExpandWidth = false;
+            entryLayout.spacing = 2;
+            entryLayout.padding = new RectOffset(8, 8, 5, 5);
 
-            // Main combat text line 1: "Attacker → Defender"
-            GameObject line1Obj = new GameObject("Line1");
-            line1Obj.transform.SetParent(entryObj.transform, false);
+            // Create text lines using same approach as left panel
+            string line1 = $"{GetCombatIcon(entry)} {entry.attackerName} → {entry.defenderName}";
+            GameObject line1Obj = CreateSimpleText(entryObj.transform, line1, 14, FontStyle.Bold, GetEntryColor(entry));
 
-            RectTransform line1RT = line1Obj.AddComponent<RectTransform>();
-            line1RT.anchorMin = new Vector2(0, 1);
-            line1RT.anchorMax = new Vector2(1, 1);
-            line1RT.pivot = new Vector2(0, 1);
-            line1RT.anchoredPosition = new Vector2(8, -5);
-            line1RT.sizeDelta = new Vector2(-16, 20);
+            string line2 = $"  {GetOutcomeText(entry)}";
+            GameObject line2Obj = CreateSimpleText(entryObj.transform, line2, 12, FontStyle.Normal, new Color(0.9f, 0.9f, 0.9f));
 
-            Text line1Text = line1Obj.AddComponent<Text>();
-            line1Text.text = $"{GetCombatIcon(entry)} {entry.attackerName} → {entry.defenderName}";
-            line1Text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            line1Text.fontSize = 14;
-            line1Text.fontStyle = FontStyle.Bold;
-            line1Text.color = GetEntryColor(entry);
-            line1Text.alignment = TextAnchor.MiddleLeft;
-
-            // Line 2: Outcome
-            GameObject line2Obj = new GameObject("Line2");
-            line2Obj.transform.SetParent(entryObj.transform, false);
-
-            RectTransform line2RT = line2Obj.AddComponent<RectTransform>();
-            line2RT.anchorMin = new Vector2(0, 1);
-            line2RT.anchorMax = new Vector2(1, 1);
-            line2RT.pivot = new Vector2(0, 1);
-            line2RT.anchoredPosition = new Vector2(8, -27);
-            line2RT.sizeDelta = new Vector2(-16, 18);
-
-            Text line2Text = line2Obj.AddComponent<Text>();
-            line2Text.text = $"   {GetOutcomeText(entry)}";
-            line2Text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            line2Text.fontSize = 12;
-            line2Text.color = new Color(0.9f, 0.9f, 0.9f);
-            line2Text.alignment = TextAnchor.MiddleLeft;
-
-            // Line 3: Turn info
-            GameObject line3Obj = new GameObject("Line3");
-            line3Obj.transform.SetParent(entryObj.transform, false);
-
-            RectTransform line3RT = line3Obj.AddComponent<RectTransform>();
-            line3RT.anchorMin = new Vector2(0, 1);
-            line3RT.anchorMax = new Vector2(1, 1);
-            line3RT.pivot = new Vector2(0, 1);
-            line3RT.anchoredPosition = new Vector2(8, -47);
-            line3RT.sizeDelta = new Vector2(-16, 16);
-
-            Text line3Text = line3Obj.AddComponent<Text>();
-            line3Text.text = $"   Turn {entry.turnNumber}";
-            line3Text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            line3Text.fontSize = 11;
-            line3Text.color = new Color(0.7f, 0.7f, 0.7f);
-            line3Text.alignment = TextAnchor.MiddleLeft;
+            string line3 = $"  Turn {entry.turnNumber}";
+            GameObject line3Obj = CreateSimpleText(entryObj.transform, line3, 11, FontStyle.Normal, new Color(0.7f, 0.7f, 0.7f));
 
             entry.uiObject = entryObj;
             entryObjects[entryObj] = entry;
 
-            Debug.Log($"[RightPanelHUD] Entry UI created: active={entryObj.activeSelf}, parent={contentContainer.name}, childCount={contentContainer.transform.childCount}");
-            Debug.Log($"[RightPanelHUD] Entry position: {entryObj.transform.position}, localPos: {entryObj.transform.localPosition}");
-            Debug.Log($"[RightPanelHUD] Entry has {entryObj.transform.childCount} children (should be 3 text lines)");
+            Debug.Log($"[RightPanelHUD] Entry UI created with {entryObj.transform.childCount} text lines");
+        }
+
+        private GameObject CreateSimpleText(Transform parent, string text, int fontSize, FontStyle fontStyle, Color color)
+        {
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(parent, false);
+
+            Text textComponent = textObj.AddComponent<Text>();
+            textComponent.text = text;
+            textComponent.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            textComponent.fontSize = fontSize;
+            textComponent.fontStyle = fontStyle;
+            textComponent.color = color;
+            textComponent.alignment = TextAnchor.MiddleLeft;
+
+            return textObj;
         }
 
         private string GetCombatIcon(CombatLogEntry entry)
