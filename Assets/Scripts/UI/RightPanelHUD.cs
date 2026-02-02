@@ -103,6 +103,11 @@ namespace PlunkAndPlunder.UI
             RectTransform sectionRT = turnSummarySection.AddComponent<RectTransform>();
             sectionRT.sizeDelta = new Vector2(0, 80);
 
+            // Add LayoutElement to control size in VerticalLayoutGroup
+            LayoutElement layoutElement = turnSummarySection.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 80;
+            layoutElement.preferredHeight = 80;
+
             // Background
             Image sectionBg = turnSummarySection.AddComponent<Image>();
             sectionBg.color = new Color(0.08f, 0.08f, 0.1f, 0.95f);
@@ -157,6 +162,10 @@ namespace PlunkAndPlunder.UI
 
             RectTransform sectionRT = combatLogSection.AddComponent<RectTransform>();
             sectionRT.sizeDelta = new Vector2(0, 600);
+
+            // Add LayoutElement for proper sizing in parent layout
+            LayoutElement layoutElement = combatLogSection.AddComponent<LayoutElement>();
+            layoutElement.flexibleHeight = 1; // Take remaining space
 
             // Background
             Image sectionBg = combatLogSection.AddComponent<Image>();
