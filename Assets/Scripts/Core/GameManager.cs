@@ -41,12 +41,15 @@ namespace PlunkAndPlunder.Core
         private CollisionYieldUI collisionYieldUI;
         private EncounterUI encounterUI; // NEW: Encounter system UI
         private CombatResultsHUD combatResultsHUD; // NEW: Deterministic combat results display
+        private CombatEventLog combatEventLog; // NEW: Combat event log in corner
         // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
         // private PlayerStatsHUD playerStatsHUD;
 
         // Combat tracking
         private Dictionary<string, int> combatRounds; // Track combat rounds per unit pair
         private Rendering.CombatIndicator combatIndicator; // Visual indicator for combat
+        private Rendering.CombatConnectionRenderer combatConnectionRenderer; // NEW: Combat connection lines
+        private Rendering.FloatingTextRenderer floatingTextRenderer; // NEW: Floating damage numbers and notifications
 
         // Events
         public event Action<GamePhase> OnPhaseChanged;
@@ -159,6 +162,12 @@ namespace PlunkAndPlunder.Core
                 combatResultsHUD = combatResultsHUDObj.AddComponent<CombatResultsHUD>();
                 combatResultsHUD.Initialize();
 
+                // NEW: Initialize Combat Event Log
+                GameObject combatEventLogObj = new GameObject("CombatEventLog");
+                combatEventLogObj.transform.SetParent(canvas.transform, false);
+                combatEventLog = combatEventLogObj.AddComponent<CombatEventLog>();
+                combatEventLog.Initialize();
+
                 // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
                 // GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
                 // playerStatsHUDObj.transform.SetParent(canvas.transform, false);
@@ -171,6 +180,16 @@ namespace PlunkAndPlunder.Core
             combatIndicator = combatIndicatorObj.AddComponent<Rendering.CombatIndicator>();
             combatIndicator.Initialize();
             Debug.Log("[GameManager] Combat indicator initialized");
+
+            // Initialize combat connection renderer
+            GameObject combatConnectionObj = new GameObject("CombatConnectionRenderer");
+            combatConnectionRenderer = combatConnectionObj.AddComponent<Rendering.CombatConnectionRenderer>();
+            Debug.Log("[GameManager] Combat connection renderer initialized");
+
+            // Initialize floating text renderer
+            GameObject floatingTextObj = new GameObject("FloatingTextRenderer");
+            floatingTextRenderer = floatingTextObj.AddComponent<Rendering.FloatingTextRenderer>();
+            Debug.Log("[GameManager] Floating text renderer initialized");
 
             // Initialization (map, structures, units) already handled by engine.InitializeGame()
 
@@ -770,6 +789,45 @@ namespace PlunkAndPlunder.Core
             HexCoord combatPosition = defender.position;
             ShowCombatIndicator(combatPosition);
 
+            // Show combat connection line between combatants
+            if (combatConnectionRenderer != null)
+            {
+                Vector3 attackerWorldPos = attacker.position.ToWorldPosition(1f);
+                Vector3 defenderWorldPos = defender.position.ToWorldPosition(1f);
+
+                // Determine combat outcome for visual styling
+                Rendering.CombatOutcome outcome;
+                if (combatEvent.attackerDestroyed && combatEvent.defenderDestroyed)
+                {
+                    outcome = Rendering.CombatOutcome.MutualDestruction;
+                }
+                else if (combatEvent.defenderDestroyed && attacker.ownerId == 0)
+                {
+                    outcome = Rendering.CombatOutcome.PlayerVictory;
+                }
+                else if (!combatEvent.attackerDestroyed && !combatEvent.defenderDestroyed)
+                {
+                    outcome = Rendering.CombatOutcome.Ongoing;
+                }
+                else
+                {
+                    outcome = Rendering.CombatOutcome.Standard;
+                }
+
+                combatConnectionRenderer.ShowCombatLine(
+                    attackerWorldPos,
+                    defenderWorldPos,
+                    combatEvent.damageToDefender,
+                    outcome
+                );
+            }
+
+            // Add to combat event log
+            if (combatEventLog != null)
+            {
+                combatEventLog.AddCombatEntry(combatEvent, state);
+            }
+
             // Check if human player is involved in combat
             bool humanInvolved = (attacker != null && attacker.ownerId == 0) || (defender != null && defender.ownerId == 0);
 
@@ -795,12 +853,26 @@ namespace PlunkAndPlunder.Core
                 // Attacker destroyed defender - award salvage to attacker's owner
                 state.playerManager.GetPlayer(attacker.ownerId).gold += SALVAGE_VALUE;
                 Debug.Log($"[GameManager] Player {attacker.ownerId} earned {SALVAGE_VALUE}g salvage from destroying {defender?.id ?? combatEvent.defenderId}");
+
+                // Show floating gold notification at defender's position
+                if (floatingTextRenderer != null)
+                {
+                    Vector3 defenderWorldPos = defender.position.ToWorldPosition(1f);
+                    floatingTextRenderer.SpawnGoldNotification(defenderWorldPos, SALVAGE_VALUE);
+                }
             }
             else if (combatEvent.attackerDestroyed && defender != null)
             {
                 // Defender destroyed attacker - award salvage to defender's owner
                 state.playerManager.GetPlayer(defender.ownerId).gold += SALVAGE_VALUE;
                 Debug.Log($"[GameManager] Player {defender.ownerId} earned {SALVAGE_VALUE}g salvage from destroying {attacker?.id ?? combatEvent.attackerId}");
+
+                // Show floating gold notification at attacker's position
+                if (floatingTextRenderer != null)
+                {
+                    Vector3 attackerWorldPos = attacker.position.ToWorldPosition(1f);
+                    floatingTextRenderer.SpawnGoldNotification(attackerWorldPos, SALVAGE_VALUE);
+                }
             }
 
             // If either unit is destroyed, clear the combat tracking
