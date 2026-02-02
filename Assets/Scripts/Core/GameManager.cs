@@ -828,23 +828,28 @@ namespace PlunkAndPlunder.Core
                 rightPanelHUD.AddCombatEntry(combatEvent, state);
             }
 
+            // DEPRECATED: Old center popup (now using right panel combat log)
             // Check if human player is involved in combat
-            bool humanInvolved = (attacker != null && attacker.ownerId == 0) || (defender != null && defender.ownerId == 0);
+            // bool humanInvolved = (attacker != null && attacker.ownerId == 0) || (defender != null && defender.ownerId == 0);
 
             // Show combat results HUD (non-blocking overlay) for human combats
-            if (humanInvolved && !isAutoResolving)
-            {
-                if (combatResultsHUD != null)
-                {
-                    combatResultsHUD.ShowCombatResult(combatEvent, state);
-                    combatRounds[combatKey] = roundNumber + 1;
-                    // HUD auto-hides after 3 seconds (no animation pause!)
-                }
-            }
-            else
-            {
-                Debug.Log($"[GameManager] AI vs AI combat or auto-resolve - showing indicator only");
-            }
+            // DISABLED: Now using right panel combat log instead
+            // if (humanInvolved && !isAutoResolving)
+            // {
+            //     if (combatResultsHUD != null)
+            //     {
+            //         combatResultsHUD.ShowCombatResult(combatEvent, state);
+            //         combatRounds[combatKey] = roundNumber + 1;
+            //         // HUD auto-hides after 3 seconds (no animation pause!)
+            //     }
+            // }
+            // else
+            // {
+            //     Debug.Log($"[GameManager] AI vs AI combat or auto-resolve - showing indicator only");
+            // }
+
+            // Update combat rounds tracking
+            combatRounds[combatKey] = roundNumber + 1;
 
             // Award salvage gold for destroyed ships (50% of build cost = 25g for basic ships)
             const int SALVAGE_VALUE = 25; // 50% of 50g build cost
