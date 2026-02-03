@@ -10,6 +10,8 @@ namespace PlunkAndPlunder.UI
         private Text playersText;
         private Button startButton;
         private Button backButton;
+        private InputField nameInputField;
+        private string localPlayerName = "Player";
 
         public void Initialize()
         {
@@ -34,14 +36,24 @@ namespace PlunkAndPlunder.UI
             titleRect.SetParent(transform, false);
             titleRect.anchoredPosition = new Vector2(0, 300);
 
+            // Name input
+            GameObject nameLabel = CreateText("Your Name:", 24);
+            RectTransform nameLabelRect = nameLabel.GetComponent<RectTransform>();
+            nameLabelRect.SetParent(transform, false);
+            nameLabelRect.anchoredPosition = new Vector2(0, 220);
+
+            nameInputField = CreateInputField("Enter your name...", new Vector2(0, 170));
+            nameInputField.text = localPlayerName;
+            nameInputField.onValueChanged.AddListener(OnNameChanged);
+
             // Players list
             GameObject playersObj = CreateText("Players: Waiting...", 30);
             playersText = playersObj.GetComponent<Text>();
             playersText.alignment = TextAnchor.UpperLeft;
             RectTransform playersRect = playersObj.GetComponent<RectTransform>();
             playersRect.SetParent(transform, false);
-            playersRect.sizeDelta = new Vector2(600, 400);
-            playersRect.anchoredPosition = new Vector2(0, 50);
+            playersRect.sizeDelta = new Vector2(600, 300);
+            playersRect.anchoredPosition = new Vector2(0, 20);
 
             // Buttons
             startButton = CreateButton("Start Game", new Vector2(0, -200), OnStartClicked);
@@ -99,6 +111,72 @@ namespace PlunkAndPlunder.UI
             return button;
         }
 
+        private InputField CreateInputField(string placeholder, Vector2 position)
+        {
+            GameObject inputObj = new GameObject("InputField_Name");
+            inputObj.transform.SetParent(transform, false);
+
+            RectTransform rect = inputObj.AddComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(300, 40);
+            rect.anchoredPosition = position;
+
+            Image bg = inputObj.AddComponent<Image>();
+            bg.color = new Color(0.15f, 0.15f, 0.15f);
+
+            InputField inputField = inputObj.AddComponent<InputField>();
+
+            // Text component for input
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(inputObj.transform, false);
+
+            Text text = textObj.AddComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 20;
+            text.color = Color.white;
+            text.supportRichText = false;
+
+            RectTransform textRect = textObj.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(10, 0);
+            textRect.offsetMax = new Vector2(-10, 0);
+
+            inputField.textComponent = text;
+
+            // Placeholder
+            GameObject placeholderObj = new GameObject("Placeholder");
+            placeholderObj.transform.SetParent(inputObj.transform, false);
+
+            Text placeholderText = placeholderObj.AddComponent<Text>();
+            placeholderText.text = placeholder;
+            placeholderText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            placeholderText.fontSize = 20;
+            placeholderText.fontStyle = FontStyle.Italic;
+            placeholderText.color = new Color(0.5f, 0.5f, 0.5f);
+
+            RectTransform placeholderRect = placeholderObj.GetComponent<RectTransform>();
+            placeholderRect.anchorMin = Vector2.zero;
+            placeholderRect.anchorMax = Vector2.one;
+            placeholderRect.offsetMin = new Vector2(10, 0);
+            placeholderRect.offsetMax = new Vector2(-10, 0);
+
+            inputField.placeholder = placeholderText;
+
+            return inputField;
+        }
+
+        private void OnNameChanged(string newName)
+        {
+            localPlayerName = string.IsNullOrWhiteSpace(newName) ? "Player" : newName;
+
+            // Update player name in network transport
+            if (NetworkManager.Instance != null && NetworkManager.Instance.Transport is TCPTransport tcpTransport)
+            {
+                tcpTransport.SetLocalPlayerName(localPlayerName);
+                Debug.Log($"[LobbyUI] Player name changed to: {localPlayerName}");
+            }
+        }
+
         private void Update()
         {
             UpdatePlayersList();
@@ -120,9 +198,13 @@ namespace PlunkAndPlunder.UI
 
         private void OnStartClicked()
         {
-            Debug.Log("[LobbyUI] Starting game");
-            // TODO: Send start command through network
-            GameManager.Instance?.StartOfflineGame(4);
+            Debug.Log("[LobbyUI] Starting network game");
+
+            // Hide lobby UI
+            gameObject.SetActive(false);
+
+            // Start network game with connected players + AI
+            GameManager.Instance?.StartNetworkGame();
         }
 
         private void OnBackClicked()

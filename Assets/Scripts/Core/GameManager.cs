@@ -262,6 +262,182 @@ namespace PlunkAndPlunder.Core
             ChangePhase(GamePhase.Planning);
         }
 
+        /// <summary>
+        /// Start network multiplayer game with connected players + AI
+        /// </summary>
+        public void StartNetworkGame()
+        {
+            if (NetworkManager.Instance == null || NetworkManager.Instance.Transport == null)
+            {
+                Debug.LogError("[GameManager] Cannot start network game - NetworkManager not initialized");
+                return;
+            }
+
+            // Get connected players from network
+            List<Networking.NetworkPlayerInfo> networkPlayers = NetworkManager.Instance.Transport.GetConnectedPlayers();
+
+            Debug.Log($"[GameManager] Starting network game with {networkPlayers.Count} human players");
+
+            // Initialize GameEngine with config
+            engine = new GameEngine(config);
+
+            // Setup player configs: Human players from network + AI to fill to 4
+            List<PlayerConfig> players = new List<PlayerConfig>();
+
+            // Add human players
+            foreach (var networkPlayer in networkPlayers)
+            {
+                players.Add(new PlayerConfig(networkPlayer.playerName, PlayerType.Human));
+                Debug.Log($"[GameManager] Added human player: {networkPlayer.playerName}");
+            }
+
+            // Fill remaining slots with AI (always 4 total players)
+            int totalPlayers = 4;
+            for (int i = players.Count; i < totalPlayers; i++)
+            {
+                players.Add(new PlayerConfig($"AI {i}", PlayerType.AI));
+                Debug.Log($"[GameManager] Added AI player: AI {i}");
+            }
+
+            // Initialize game using engine (handles map gen, player setup, starting units)
+            int? seed = debugMapSeed != 0 ? debugMapSeed : (int?)null;
+            engine.InitializeGame(players, seed);
+
+            // Get reference to state for convenience
+            state = engine.State;
+
+            Debug.Log($"[GameManager] Map generated with {state.grid.playerStartIslands.Count} player start islands");
+            Debug.Log($"[GameManager] Players: {string.Join(", ", players.ConvertAll(p => $"{p.name}({p.type})"))}");
+
+            // Initialize turn animator (add component if not present)
+            turnAnimator = GetComponent<TurnAnimator>();
+            if (turnAnimator == null)
+            {
+                turnAnimator = gameObject.AddComponent<TurnAnimator>();
+            }
+            turnAnimator.Initialize(state.unitManager);
+            turnAnimator.OnAnimationStep += HandleAnimationStep;
+            turnAnimator.OnAnimationComplete += HandleAnimationComplete;
+            turnAnimator.OnConflictDetected += HandleConflictDetected;
+            turnAnimator.OnCombatOccurred += HandleCombatOccurred;
+            turnAnimator.OnStructureAttacked += HandleStructureAttacked;
+            turnAnimator.OnStructureCaptured += HandleStructureCaptured;
+
+            // Initialize combat camera controller (Phase 2.1: auto-focus on combat)
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null)
+            {
+                PlunkAndPlunder.Rendering.CombatCameraController combatCamera = mainCamera.GetComponent<PlunkAndPlunder.Rendering.CombatCameraController>();
+                if (combatCamera == null)
+                {
+                    combatCamera = mainCamera.gameObject.AddComponent<PlunkAndPlunder.Rendering.CombatCameraController>();
+                }
+                combatCamera.Initialize(turnAnimator, state.unitManager);
+                Debug.Log("[GameManager] CombatCameraController initialized - auto-focus on combat enabled (press F to toggle)");
+            }
+
+            // Initialize ghost trail renderer (Phase 1.1: show ship movement history)
+            PlunkAndPlunder.Rendering.GhostTrailRenderer ghostTrails = gameObject.GetComponent<PlunkAndPlunder.Rendering.GhostTrailRenderer>();
+            if (ghostTrails == null)
+            {
+                ghostTrails = gameObject.AddComponent<PlunkAndPlunder.Rendering.GhostTrailRenderer>();
+            }
+            PlunkAndPlunder.Rendering.UnitRenderer unitRenderer = FindFirstObjectByType<PlunkAndPlunder.Rendering.UnitRenderer>();
+            ghostTrails.Initialize(turnAnimator, unitRenderer);
+            Debug.Log("[GameManager] GhostTrailRenderer initialized - semi-transparent trails show ship movement history");
+
+            // Initialize combat range renderer (Phase 5.1: range indicators for edge combat)
+            PlunkAndPlunder.Rendering.CombatRangeRenderer rangeRenderer = gameObject.GetComponent<PlunkAndPlunder.Rendering.CombatRangeRenderer>();
+            if (rangeRenderer == null)
+            {
+                rangeRenderer = gameObject.AddComponent<PlunkAndPlunder.Rendering.CombatRangeRenderer>();
+            }
+            rangeRenderer.Initialize(turnAnimator, state.unitManager);
+            Debug.Log("[GameManager] CombatRangeRenderer initialized - shows range circles around ships with adjacent enemies");
+
+            // Initialize ongoing combat indicator (Task #9: persistent visual for multi-turn combat)
+            ongoingCombatIndicator = gameObject.GetComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+            if (ongoingCombatIndicator == null)
+            {
+                ongoingCombatIndicator = gameObject.AddComponent<PlunkAndPlunder.Rendering.OngoingCombatIndicator>();
+            }
+            ongoingCombatIndicator.Initialize(turnAnimator, state.unitManager);
+            Debug.Log("[GameManager] OngoingCombatIndicator initialized - shows crossed swords for ships in multi-turn combat");
+
+            // Initialize conflict resolution UI and combat results UI
+            Canvas canvas = FindFirstObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject conflictUIObj = new GameObject("ConflictResolutionUI");
+                conflictUIObj.transform.SetParent(canvas.transform, false);
+                conflictResolutionUI = conflictUIObj.AddComponent<ConflictResolutionUI>();
+                conflictResolutionUI.Initialize();
+
+                GameObject combatResultsUIObj = new GameObject("CombatResultsUI");
+                combatResultsUIObj.transform.SetParent(canvas.transform, false);
+                combatResultsUI = combatResultsUIObj.AddComponent<CombatResultsUI>();
+                combatResultsUI.Initialize();
+
+                GameObject collisionYieldUIObj = new GameObject("CollisionYieldUI");
+                collisionYieldUIObj.transform.SetParent(canvas.transform, false);
+                collisionYieldUI = collisionYieldUIObj.AddComponent<CollisionYieldUI>();
+                collisionYieldUI.Initialize(0); // Local player ID (human player is always 0 in offline mode)
+
+                // NEW: Initialize EncounterUI
+                GameObject encounterUIObj = new GameObject("EncounterUI");
+                encounterUIObj.transform.SetParent(canvas.transform, false);
+                encounterUI = encounterUIObj.AddComponent<EncounterUI>();
+                encounterUI.Initialize(0); // Local player ID (human player is always 0 in offline mode)
+
+                // NEW: Initialize CombatResultsHUD for deterministic combat
+                GameObject combatResultsHUDObj = new GameObject("CombatResultsHUD");
+                combatResultsHUDObj.transform.SetParent(canvas.transform, false);
+                combatResultsHUD = combatResultsHUDObj.AddComponent<CombatResultsHUD>();
+                combatResultsHUD.Initialize();
+
+                // NEW: Initialize Right Panel HUD with combat log
+                GameObject rightPanelHUDObj = new GameObject("RightPanelHUD");
+                rightPanelHUDObj.transform.SetParent(canvas.transform, false);
+                rightPanelHUD = rightPanelHUDObj.AddComponent<RightPanelHUD>();
+                rightPanelHUD.Initialize(state);
+
+                // NEW: Initialize Combat Summary Panel
+                GameObject combatSummaryObj = new GameObject("CombatSummaryPanel");
+                combatSummaryObj.transform.SetParent(canvas.transform, false);
+                combatSummaryPanel = combatSummaryObj.AddComponent<UI.CombatSummaryPanel>();
+                combatSummaryPanel.Initialize();
+                Debug.Log("[GameManager] Combat summary panel initialized");
+
+                // DEPRECATED: PlayerStatsHUD is now integrated into LeftPanelHUD
+                // GameObject playerStatsHUDObj = new GameObject("PlayerStatsHUD");
+                // playerStatsHUDObj.transform.SetParent(canvas.transform, false);
+                // playerStatsHUD = playerStatsHUDObj.AddComponent<PlayerStatsHUD>();
+                // playerStatsHUD.Initialize();
+            }
+
+            // Initialize combat indicator
+            GameObject combatIndicatorObj = new GameObject("CombatIndicator");
+            combatIndicator = combatIndicatorObj.AddComponent<Rendering.CombatIndicator>();
+            combatIndicator.Initialize();
+            Debug.Log("[GameManager] Combat indicator initialized");
+
+            // Initialize combat connection renderer
+            GameObject combatConnectionObj = new GameObject("CombatConnectionRenderer");
+            combatConnectionRenderer = combatConnectionObj.AddComponent<Rendering.CombatConnectionRenderer>();
+            Debug.Log("[GameManager] Combat connection renderer initialized");
+
+            // Initialize floating text renderer
+            GameObject floatingTextObj = new GameObject("FloatingTextRenderer");
+            floatingTextRenderer = floatingTextObj.AddComponent<Rendering.FloatingTextRenderer>();
+            Debug.Log("[GameManager] Floating text renderer initialized");
+
+            // Trigger initial render
+            OnGameStateUpdated?.Invoke(state);
+
+            // Transition to game
+            ChangePhase(GamePhase.Planning);
+        }
+
         // Initialization methods moved to GameInitializer for shared use across game modes
 
         public void ChangePhase(GamePhase newPhase)

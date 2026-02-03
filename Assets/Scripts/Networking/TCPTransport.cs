@@ -43,6 +43,7 @@ namespace PlunkAndPlunder.Networking
         // Player tracking
         private Dictionary<string, NetworkPlayerInfo> _players = new Dictionary<string, NetworkPlayerInfo>();
         private int _nextClientId = 1;
+        private string _localPlayerName = "Player";
 
         // Main thread event queue (Unity isn't thread-safe)
         private ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
@@ -51,6 +52,36 @@ namespace PlunkAndPlunder.Networking
         {
             LocalPlayerId = Guid.NewGuid().ToString();
             Debug.Log($"[TCPTransport] Initialized with ID: {LocalPlayerId}");
+        }
+
+        /// <summary>
+        /// Set the local player's display name
+        /// </summary>
+        public void SetLocalPlayerName(string name)
+        {
+            _localPlayerName = string.IsNullOrWhiteSpace(name) ? "Player" : name;
+
+            // Update in player list
+            if (_players.ContainsKey(LocalPlayerId))
+            {
+                _players[LocalPlayerId] = new NetworkPlayerInfo(LocalPlayerId, _localPlayerName, _players[LocalPlayerId].isReady);
+            }
+
+            // Broadcast update if connected
+            if (IsConnected)
+            {
+                if (IsHost)
+                {
+                    BroadcastPlayerList();
+                }
+                else
+                {
+                    // Send name update to host
+                    SendRawMessage(_clientStream, $"NAME:{_localPlayerName}");
+                }
+            }
+
+            Debug.Log($"[TCPTransport] Local player name set to: {_localPlayerName}");
         }
 
         public void CreateLobby(int maxPlayers)
@@ -71,7 +102,7 @@ namespace PlunkAndPlunder.Networking
                 _listener.Start();
 
                 // Add host as first player
-                _players[LocalPlayerId] = new NetworkPlayerInfo(LocalPlayerId, "Host", false);
+                _players[LocalPlayerId] = new NetworkPlayerInfo(LocalPlayerId, _localPlayerName, false);
 
                 // Start accepting connections on background thread
                 _acceptThread = new Thread(AcceptClientsLoop);
@@ -111,8 +142,8 @@ namespace PlunkAndPlunder.Networking
                 _client.Connect(ip, port);
                 _clientStream = _client.GetStream();
 
-                // Send join message with our player ID
-                SendRawMessage(_clientStream, $"JOIN:{LocalPlayerId}");
+                // Send join message with our player ID and name
+                SendRawMessage(_clientStream, $"JOIN:{LocalPlayerId}:{_localPlayerName}");
 
                 // Start receiving messages
                 _isRunning = true;
@@ -306,8 +337,12 @@ namespace PlunkAndPlunder.Networking
                     return;
                 }
 
-                playerId = joinMsg.Substring(5);
-                Debug.Log($"[TCPTransport] Client connected: {playerId}");
+                // Parse JOIN:playerId:playerName
+                string[] joinParts = joinMsg.Substring(5).Split(':');
+                playerId = joinParts[0];
+                string playerName = joinParts.Length > 1 ? joinParts[1] : $"Player{_nextClientId++}";
+
+                Debug.Log($"[TCPTransport] Client connected: {playerId} as {playerName}");
 
                 // Store client
                 var clientConnection = new ClientConnection
@@ -319,7 +354,7 @@ namespace PlunkAndPlunder.Networking
                 _clients[playerId] = clientConnection;
 
                 // Add to players list
-                _players[playerId] = new NetworkPlayerInfo(playerId, $"Player{_nextClientId++}", false);
+                _players[playerId] = new NetworkPlayerInfo(playerId, playerName, false);
 
                 // Notify on main thread
                 EnqueueMainThreadAction(() => OnPlayerJoined?.Invoke(playerId));
@@ -350,6 +385,17 @@ namespace PlunkAndPlunder.Networking
 
                         // Notify host
                         EnqueueMainThreadAction(() => OnMessageReceived?.Invoke(msg));
+                    }
+                    else if (rawMsg.StartsWith("NAME:"))
+                    {
+                        // Handle name update
+                        string newName = rawMsg.Substring(5);
+                        if (_players.ContainsKey(playerId))
+                        {
+                            _players[playerId] = new NetworkPlayerInfo(playerId, newName, _players[playerId].isReady);
+                            Debug.Log($"[TCPTransport] Player {playerId} changed name to: {newName}");
+                            BroadcastPlayerList();
+                        }
                     }
                 }
             }
