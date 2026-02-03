@@ -2,6 +2,15 @@
 
 A turn-based naval strategy game built in Unity. Command your fleet, build shipyards, upgrade ships, and destroy enemy strongholds!
 
+## Download & Play
+
+**Latest Release:** [Download PlunkAndPlunder-Windows.zip](https://github.com/dc6g4xtrm4-stack/plunk-and-plunder/releases/latest)
+
+1. Download the latest release
+2. Extract the ZIP file
+3. Run `PlunkAndPlunder.exe`
+4. See [MULTIPLAYER_SETUP.md](MULTIPLAYER_SETUP.md) for playing with friends!
+
 ## Quick Start
 
 ### Single Player
@@ -10,10 +19,10 @@ A turn-based naval strategy game built in Unity. Command your fleet, build shipy
 3. Destroy all enemy shipyards to win!
 
 ### Multiplayer
-1. **Host**: "Host Game" → Share your IP
-2. **Client**: "Join Game" → Enter host IP → "Connect"
+1. **Host**: Click "Host" → Share your ngrok/IP address
+2. **Client**: Enter host address → Click "Join"
 
-See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for detailed getting started guide.
+**See [MULTIPLAYER_SETUP.md](MULTIPLAYER_SETUP.md) for detailed setup guide (ngrok, port forwarding, VPN options)**
 
 ## Game Features
 
@@ -31,7 +40,11 @@ See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) for detailed getting started guid
 - [`PLUNK_AND_PLUNDER_RULEBOOK.md`](PLUNK_AND_PLUNDER_RULEBOOK.md) - Complete game rules
 
 ### Multiplayer
+- [`MULTIPLAYER_SETUP.md`](MULTIPLAYER_SETUP.md) - **How to play with friends (ngrok, port forwarding, VPN)**
 - [`docs/MULTIPLAYER.md`](docs/MULTIPLAYER.md) - Network setup and testing
+
+### Development
+- [`GITHUB_ACTIONS_SETUP.md`](GITHUB_ACTIONS_SETUP.md) - **Automated builds and releases**
 
 ### Technical
 - [`docs/SYSTEMS.md`](docs/SYSTEMS.md) - System architecture and implementation
