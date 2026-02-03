@@ -827,15 +827,15 @@ namespace PlunkAndPlunder.Core
             // Track destroyed units for summary
             if (combatEvent.attackerDestroyed)
             {
-                Unit attacker = state.unitManager.GetUnit(combatEvent.attackerId);
-                int ownerId = attacker != null ? attacker.ownerId : -1;
-                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.attackerId, ownerId, new Map.HexCoord(0, 0)));
+                Unit destroyedAttacker = state.unitManager.GetUnit(combatEvent.attackerId);
+                int attackerOwnerId = destroyedAttacker != null ? destroyedAttacker.ownerId : -1;
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.attackerId, attackerOwnerId, new Map.HexCoord(0, 0)));
             }
             if (combatEvent.defenderDestroyed)
             {
-                Unit defender = state.unitManager.GetUnit(combatEvent.defenderId);
-                int ownerId = defender != null ? defender.ownerId : -1;
-                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.defenderId, ownerId, new Map.HexCoord(0, 0)));
+                Unit destroyedDefender = state.unitManager.GetUnit(combatEvent.defenderId);
+                int defenderOwnerId = destroyedDefender != null ? destroyedDefender.ownerId : -1;
+                turnDestroyedEvents.Add(new UnitDestroyedEvent(state.turnNumber, combatEvent.defenderId, defenderOwnerId, new Map.HexCoord(0, 0)));
             }
 
             // DON'T PAUSE ANIMATION - let ships continue moving!
