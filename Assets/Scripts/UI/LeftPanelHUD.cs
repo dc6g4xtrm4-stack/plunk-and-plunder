@@ -184,8 +184,9 @@ namespace PlunkAndPlunder.UI
             rt.sizeDelta = new Vector2(0, HUDStyles.UnitDetailsSectionHeight);
 
             LayoutElement layoutElement = unitDetailsSection.AddComponent<LayoutElement>();
-            layoutElement.minHeight = 150;
+            layoutElement.minHeight = 120; // Reduced minimum height
             layoutElement.preferredHeight = HUDStyles.UnitDetailsSectionHeight;
+            layoutElement.flexibleHeight = 1; // Allow section to shrink if needed
 
             VerticalLayoutGroup layout = unitDetailsSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
@@ -322,8 +323,9 @@ namespace PlunkAndPlunder.UI
             rt.sizeDelta = new Vector2(0, HUDStyles.BuildQueueSectionHeight);
 
             LayoutElement layoutElement = buildQueueSection.AddComponent<LayoutElement>();
-            layoutElement.minHeight = 100;
+            layoutElement.minHeight = 80; // Reduced minimum height
             layoutElement.preferredHeight = HUDStyles.BuildQueueSectionHeight;
+            layoutElement.flexibleHeight = 1; // Allow section to shrink if needed
 
             VerticalLayoutGroup layout = buildQueueSection.AddComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.UpperLeft;
@@ -386,11 +388,12 @@ namespace PlunkAndPlunder.UI
             actionButtonsSection.transform.SetParent(transform, false);
 
             RectTransform rt = actionButtonsSection.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0, 420); // Fixed height - fits all 6 buttons properly (6*50 + 5*10 + header + padding)
+            rt.sizeDelta = new Vector2(0, 380); // Reduced height - buttons show/hide dynamically based on context
 
             LayoutElement layoutElement = actionButtonsSection.AddComponent<LayoutElement>();
-            layoutElement.minHeight = 420;
-            layoutElement.preferredHeight = 420;
+            layoutElement.minHeight = 100; // Minimum when few buttons shown
+            layoutElement.preferredHeight = 380; // Preferred when multiple buttons shown
+            layoutElement.flexibleHeight = 1; // Allow section to shrink if needed
 
             // Layout
             VerticalLayoutGroup layout = actionButtonsSection.AddComponent<VerticalLayoutGroup>();
