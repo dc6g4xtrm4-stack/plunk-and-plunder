@@ -1187,16 +1187,29 @@ namespace PlunkAndPlunder.Resolution
 
             foreach (Player player in playerManager.GetActivePlayers())
             {
-                // Player eliminated if they have no units
+                // Player eliminated if they have no units AND no structures
+                // This allows players to continue playing if they have shipyards/structures even without ships
                 List<Unit> playerUnits = unitManager.GetUnitsForPlayer(player.id);
-                if (playerUnits.Count == 0)
+                List<Structure> playerStructures = structureManager.GetStructuresForPlayer(player.id);
+
+                bool hasNoUnits = (playerUnits.Count == 0);
+                bool hasNoStructures = (playerStructures.Count == 0);
+
+                if (hasNoUnits && hasNoStructures)
                 {
                     playerManager.EliminatePlayer(player.id);
                     events.Add(new PlayerEliminatedEvent(turnNumber, player.id, player.name));
 
                     if (enableLogging)
                     {
-                        Debug.Log($"[TurnResolver] Player {player.name} eliminated");
+                        Debug.Log($"[TurnResolver] Player {player.name} eliminated (no units and no structures)");
+                    }
+                }
+                else if (hasNoUnits && !hasNoStructures)
+                {
+                    if (enableLogging)
+                    {
+                        Debug.Log($"[TurnResolver] Player {player.name} has no ships but still has {playerStructures.Count} structure(s) - not eliminated");
                     }
                 }
             }
